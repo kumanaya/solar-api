@@ -4,25 +4,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { FileText, DollarSign, Save, Loader2 } from "lucide-react";
 import { useAnalysis } from "./analysis-context";
+import { PDFModal } from "./pdf-modal";
 
 export function ActionButtons() {
   const { data } = useAnalysis();
-  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+  const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleGeneratePDF = async () => {
-    setIsGeneratingPDF(true);
-    try {
-      // Simular geração de PDF
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log("PDF gerado para:", data.address);
-      alert("PDF do laudo gerado com sucesso!");
-    } catch (error) {
-      console.error("Erro ao gerar PDF:", error);
-      alert("Erro ao gerar PDF. Tente novamente.");
-    } finally {
-      setIsGeneratingPDF(false);
-    }
+  const handleOpenPDFModal = () => {
+    setIsPDFModalOpen(true);
   };
 
   const handleAddProposal = async () => {
@@ -53,32 +43,22 @@ export function ActionButtons() {
   };
 
   return (
-    <div className="space-y-3">
-      {/* Botão principal - Gerar PDF */}
-      <Button 
-        onClick={handleGeneratePDF}
-        disabled={isGeneratingPDF}
-        className="w-full"
-      >
-        {isGeneratingPDF ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Gerando PDF...
-          </>
-        ) : (
-          <>
-            <FileText className="mr-2 h-4 w-4" />
-            Gerar PDF do Laudo
-          </>
-        )}
-      </Button>
+    <>
+      <div className="space-y-3">
+        {/* Botão principal - Gerar PDF */}
+        <Button 
+          onClick={handleOpenPDFModal}
+          className="w-full"
+        >
+          <FileText className="mr-2 h-4 w-4" />
+          Gerar PDF do Laudo
+        </Button>
 
       {/* Botões secundários */}
       <div className="grid grid-cols-2 gap-2">
         <Button 
           variant="outline" 
           onClick={handleAddProposal}
-          disabled={isGeneratingPDF}
         >
           <DollarSign className="mr-2 h-4 w-4" />
           Add Proposta
@@ -98,11 +78,19 @@ export function ActionButtons() {
         </Button>
       </div>
 
-      {/* Informações adicionais */}
-      <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-        <p>💡 O PDF incluirá todos os dados técnicos e o veredicto</p>
-        <p>💰 A proposta comercial será calculada automaticamente</p>
+        {/* Informações adicionais */}
+        <div className="text-xs text-muted-foreground text-center pt-2 border-t">
+          <p>💡 O PDF incluirá todos os dados técnicos e o veredicto</p>
+          <p>💰 A proposta comercial será calculada automaticamente</p>
+        </div>
       </div>
-    </div>
+
+      {/* Modal do PDF */}
+      <PDFModal 
+        isOpen={isPDFModalOpen} 
+        onClose={() => setIsPDFModalOpen(false)}
+        analysisData={data}
+      />
+    </>
   );
 }
