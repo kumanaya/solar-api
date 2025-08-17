@@ -55,9 +55,9 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
       case "Média":
         return "bg-yellow-100 text-yellow-800";
       case "Baixa":
-        return "bg-red-100 text-red-800";
+        return "variant-destructive";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "variant-outline";
     }
   };
 
@@ -68,9 +68,9 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
       case "Parcial":
         return "bg-yellow-100 text-yellow-800";
       case "Não apto":
-        return "bg-red-100 text-red-800";
+        return "variant-destructive";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "variant-outline";
     }
   };
 
@@ -83,7 +83,7 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
   const productionVariation = ((maxProduction - minProduction) / minProduction) * 100;
 
   return (
-    <div className="h-full flex flex-col bg-white">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="border-b p-4">
         <div className="flex items-center justify-between">
@@ -144,7 +144,7 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
                         {isOriginal ? 'Análise Original' : `Reprocessamento ${analysis.history.length - index - 1}`}
                       </span>
                       {isLatest && (
-                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                        <Badge variant="outline" className="text-xs">
                           Atual
                         </Badge>
                       )}
@@ -162,12 +162,24 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
                 <CardContent className="space-y-3">
                   {/* Badges de status */}
                   <div className="flex flex-wrap gap-1">
-                    <Badge className={`text-xs ${getConfidenceColor(version.confidence)}`}>
-                      {version.confidence}
-                    </Badge>
-                    <Badge className={`text-xs ${getVerdictColor(version.verdict)}`}>
-                      {version.verdict}
-                    </Badge>
+                    {version.confidence === "Baixa" ? (
+                      <Badge variant="destructive" className="text-xs">
+                        {version.confidence}
+                      </Badge>
+                    ) : (
+                      <Badge className={`text-xs ${getConfidenceColor(version.confidence)}`}>
+                        {version.confidence}
+                      </Badge>
+                    )}
+                    {version.verdict === "Não apto" ? (
+                      <Badge variant="destructive" className="text-xs">
+                        {version.verdict}
+                      </Badge>
+                    ) : (
+                      <Badge className={`text-xs ${getVerdictColor(version.verdict)}`}>
+                        {version.verdict}
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Métricas principais */}
@@ -183,7 +195,7 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
                   </div>
 
                   {/* Produção estimada */}
-                  <div className="bg-orange-50 rounded-lg p-2">
+                  <div className="bg-muted/50 rounded-lg p-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">Produção estimada</span>
                       {version.variationFromPrevious !== undefined && (

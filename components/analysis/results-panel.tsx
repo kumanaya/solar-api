@@ -48,12 +48,12 @@ export function ResultsPanel() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Banner de erro não bloqueante */}
         {error && (
-          <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+          <div className="bg-muted/50 border border-border rounded-lg p-3">
             <div className="flex items-start space-x-2">
               <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
               <div>
-                <p className="text-sm text-orange-800">{error}</p>
-                <p className="text-xs text-orange-600 mt-1">
+                <p className="text-sm text-foreground">{error}</p>
+                <p className="text-xs text-muted-foreground mt-1">
                   Tentando fonte alternativa...
                 </p>
               </div>
@@ -68,8 +68,8 @@ export function ResultsPanel() {
         {data.coordinates ? (
           <TechnicalResults />
         ) : (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
-            <p className="text-sm text-blue-800">
+          <div className="bg-muted/50 border border-border rounded-lg p-4 text-center">
+            <p className="text-sm text-muted-foreground">
               Digite um endereço acima para iniciar a análise
             </p>
           </div>
@@ -77,8 +77,8 @@ export function ResultsPanel() {
 
         {/* Callout para desenhar telhado */}
         {data.coordinates && data.footprints.length === 0 && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-            <p className="text-sm text-gray-700 mb-2">
+          <div className="bg-muted/50 border border-border rounded-lg p-4 text-center">
+            <p className="text-sm text-muted-foreground mb-2">
               Nenhum telhado detectado automaticamente
             </p>
             <button className="text-sm text-blue-600 hover:text-blue-800 font-medium">

@@ -25,7 +25,7 @@ export function CoverageStatus() {
       case "Média":
         return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
       case "Baixa":
-        return "bg-red-100 text-red-800 hover:bg-red-100";
+        return "variant-destructive";
     }
   };
 
@@ -43,7 +43,7 @@ export function CoverageStatus() {
   return (
     <div className="space-y-3">
       {/* Status de cobertura */}
-      <div className="bg-gray-50 rounded-lg p-3">
+      <div className="bg-muted/50 rounded-lg p-3">
         <div className="flex items-start space-x-2">
           <Info className="h-4 w-4 text-blue-500 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
@@ -62,10 +62,17 @@ export function CoverageStatus() {
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Confiança da Análise</span>
         <div className="group relative">
-          <Badge className={getConfidenceColor()}>
-            {getConfidenceIcon()}
-            <span className="ml-1">{data.confidence}</span>
-          </Badge>
+          {data.confidence === "Baixa" ? (
+            <Badge variant="destructive">
+              {getConfidenceIcon()}
+              <span className="ml-1">{data.confidence}</span>
+            </Badge>
+          ) : (
+            <Badge className={getConfidenceColor()}>
+              {getConfidenceIcon()}
+              <span className="ml-1">{data.confidence}</span>
+            </Badge>
+          )}
           
           {/* Tooltip */}
           <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block">
@@ -79,11 +86,11 @@ export function CoverageStatus() {
 
       {/* Botão Aprimorar precisão - se confiança baixa */}
       {data.confidence === "Baixa" && (
-        <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-          <p className="text-sm text-orange-800 mb-2">
+        <div className="bg-muted/50 border border-border rounded-lg p-3">
+          <p className="text-sm text-muted-foreground mb-2">
             Precisão pode ser melhorada
           </p>
-          <button className="text-xs text-orange-600 hover:text-orange-800 font-medium">
+          <button className="text-xs text-blue-600 hover:text-blue-800 font-medium">
             Desenhar/ajustar polígono manualmente
           </button>
         </div>

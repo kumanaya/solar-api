@@ -9,7 +9,7 @@ interface DrawingToolbarProps {
 
 export function DrawingToolbar({ onExit }: DrawingToolbarProps) {
   return (
-    <div className="bg-white rounded-lg shadow-lg border p-2 flex space-x-2">
+    <div className="bg-background rounded-lg shadow-lg border p-2 flex space-x-2">
       <Button size="sm" variant="outline">
         <Pen className="h-4 w-4" />
       </Button>

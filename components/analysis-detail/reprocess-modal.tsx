@@ -164,9 +164,9 @@ export function ReprocessModal() {
         {!isProcessing && currentStep !== "completed" && !hasError && (
           <div className="space-y-6 py-4">
             {/* Informações da análise atual */}
-            <div className="bg-gray-50 rounded-lg p-3">
+            <div className="bg-muted/50 rounded-lg p-3">
               <div className="flex items-center space-x-2 mb-2">
-                <Database className="h-4 w-4 text-gray-600" />
+                <Database className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Análise Atual</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">

@@ -44,8 +44,8 @@ export function MapPanel() {
           onClick={() => setIsDrawingMode(!isDrawingMode)}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             isDrawingMode
-              ? "bg-red-500 text-white hover:bg-red-600"
-              : "bg-white text-gray-900 shadow-lg hover:bg-gray-50 border"
+              ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              : "bg-background text-foreground shadow-lg hover:bg-muted border"
           }`}
         >
           {isDrawingMode ? "Cancelar Desenho" : "Desenhar Telhado"}

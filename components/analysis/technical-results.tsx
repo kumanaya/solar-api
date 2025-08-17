@@ -48,7 +48,7 @@ export function TechnicalResults() {
       case "Parcial":
         return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
       case "Não apto":
-        return "bg-red-100 text-red-800 hover:bg-red-100";
+        return "variant-destructive";
     }
   };
 
@@ -158,7 +158,7 @@ export function TechnicalResults() {
       </Card>
 
       {/* Estimativa de produção */}
-      <Card className="border-orange-200 bg-orange-50">
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center space-x-2">
             <Zap className="h-4 w-4 text-orange-500" />
@@ -167,20 +167,16 @@ export function TechnicalResults() {
         </CardHeader>
         <CardContent>
           <div className="text-center">
-            <span className="text-3xl font-bold text-orange-600">
+            <span className="text-3xl font-bold">
               {data.estimatedProduction.toLocaleString()}
             </span>
-            <p className="text-sm text-orange-700 mt-1">kWh/ano</p>
+            <p className="text-sm text-muted-foreground mt-1">kWh/ano</p>
           </div>
         </CardContent>
       </Card>
 
       {/* Veredicto */}
-      <Card className={`border-2 ${
-        data.verdict === "Apto" ? "border-green-200 bg-green-50" :
-        data.verdict === "Parcial" ? "border-yellow-200 bg-yellow-50" :
-        "border-red-200 bg-red-50"
-      }`}>
+      <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center space-x-2">
             {getVerdictIcon()}
@@ -189,9 +185,15 @@ export function TechnicalResults() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <Badge className={getVerdictColor()}>
-              {data.verdict}
-            </Badge>
+            {data.verdict === "Não apto" ? (
+              <Badge variant="destructive">
+                {data.verdict}
+              </Badge>
+            ) : (
+              <Badge className={getVerdictColor()}>
+                {data.verdict}
+              </Badge>
+            )}
             
             <div className="space-y-1">
               <p className="text-xs font-medium">Razões:</p>

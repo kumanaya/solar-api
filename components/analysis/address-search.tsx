@@ -71,7 +71,7 @@ export function AddressSearch() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg border p-3">
+    <div className="bg-background rounded-lg shadow-lg border p-3">
       <div className="flex space-x-2">
         <div className="relative flex-1">
           <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

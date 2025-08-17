@@ -28,7 +28,7 @@ export function AnalysisHeader() {
       case "Média":
         return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
       case "Baixa":
-        return "bg-red-100 text-red-800 hover:bg-red-100";
+        return "variant-destructive";
     }
   };
 
@@ -43,17 +43,12 @@ export function AnalysisHeader() {
   };
 
   const getSourceColor = (source: string) => {
-    const colors: Record<string, string> = {
-      "PVGIS": "bg-blue-100 text-blue-800",
-      "NASA": "bg-green-100 text-green-800", 
-      "Solcast": "bg-purple-100 text-purple-800",
-      "Google": "bg-orange-100 text-orange-800"
-    };
-    return colors[source] || "bg-gray-100 text-gray-800";
+    // Remover cores customizadas - usar apenas variant outline padrão
+    return "";
   };
 
   return (
-    <div className="border-b bg-white">
+    <div className="border-b bg-background">
       <div className="p-4 space-y-4">
         {/* Linha superior com navegação */}
         <div className="flex items-center space-x-3">
@@ -95,9 +90,15 @@ export function AnalysisHeader() {
             {/* Selo de confiança */}
             <div className="flex items-center space-x-2">
               <Shield className="h-4 w-4 text-muted-foreground" />
-              <Badge className={getConfidenceColor()}>
-                Confiança {analysis.currentVersion.confidence}
-              </Badge>
+              {analysis.currentVersion.confidence === "Baixa" ? (
+                <Badge variant="destructive">
+                  Confiança {analysis.currentVersion.confidence}
+                </Badge>
+              ) : (
+                <Badge className={getConfidenceColor()}>
+                  Confiança {analysis.currentVersion.confidence}
+                </Badge>
+              )}
             </div>
           </div>
 
@@ -109,7 +110,7 @@ export function AnalysisHeader() {
                 <Badge 
                   key={source}
                   variant="outline" 
-                  className={`text-xs ${getSourceColor(source)}`}
+                  className="text-xs"
                 >
                   {source}
                 </Badge>
@@ -119,24 +120,18 @@ export function AnalysisHeader() {
 
           {/* Informações de reprocessamento */}
           {analysis.reprocessCount > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="bg-muted/50 border border-border rounded-lg p-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <Database className="h-4 w-4 text-blue-600" />
-                  <span className="text-sm font-medium text-blue-800">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">
                     {analysis.reprocessCount} reprocessamento{analysis.reprocessCount > 1 ? 's' : ''} realizado{analysis.reprocessCount > 1 ? 's' : ''}
                   </span>
                 </div>
                 {analysis.currentVersion.variationFromPrevious !== undefined && (
                   <Badge 
                     variant="outline"
-                    className={`text-xs ${
-                      analysis.currentVersion.variationFromPrevious > 0 
-                        ? 'text-green-700 border-green-300' 
-                        : analysis.currentVersion.variationFromPrevious < 0
-                        ? 'text-red-700 border-red-300'
-                        : 'text-gray-700 border-gray-300'
-                    }`}
+                    className="text-xs"
                   >
                     {analysis.currentVersion.variationFromPrevious > 0 ? '+' : ''}
                     {analysis.currentVersion.variationFromPrevious?.toFixed(1)}%

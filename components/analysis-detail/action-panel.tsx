@@ -48,7 +48,7 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
 
   return (
     <>
-      <div className="border-t bg-white">
+      <div className="border-t bg-background">
         <div className="p-4 space-y-4">
           {/* Ações principais */}
           <div className="flex flex-wrap gap-3">

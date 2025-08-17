@@ -40,7 +40,7 @@ export function TechnicalPanel() {
       case "Parcial":
         return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
       case "Não apto":
-        return "bg-red-100 text-red-800 hover:bg-red-100";
+        return "variant-destructive";
     }
   };
 
@@ -55,7 +55,7 @@ export function TechnicalPanel() {
   return (
     <div className="h-full flex flex-col">
       {/* Header do painel */}
-      <div className="p-4 border-b bg-gray-50">
+      <div className="p-4 border-b bg-muted/50">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Resultados Técnicos</h2>
           <div className="flex items-center space-x-2 text-sm text-muted-foreground">
@@ -162,7 +162,7 @@ export function TechnicalPanel() {
         </Card>
 
         {/* Estimativa de produção */}
-        <Card className="border-orange-200 bg-orange-50 relative">
+        <Card className="relative">
           <div className="absolute top-3 right-3">
             <Lock className="h-4 w-4 text-muted-foreground" />
           </div>
@@ -174,20 +174,16 @@ export function TechnicalPanel() {
           </CardHeader>
           <CardContent>
             <div className="text-center">
-              <span className="text-3xl font-bold text-orange-600">
+              <span className="text-3xl font-bold">
                 {currentVersion.estimatedProduction.toLocaleString()}
               </span>
-              <p className="text-sm text-orange-700 mt-1">kWh/ano</p>
+              <p className="text-sm text-muted-foreground mt-1">kWh/ano</p>
             </div>
           </CardContent>
         </Card>
 
         {/* Veredicto */}
-        <Card className={`border-2 ${
-          currentVersion.verdict === "Apto" ? "border-green-200 bg-green-50" :
-          currentVersion.verdict === "Parcial" ? "border-yellow-200 bg-yellow-50" :
-          "border-red-200 bg-red-50"
-        } relative`}>
+        <Card className="relative">
           <div className="absolute top-3 right-3">
             <Lock className="h-4 w-4 text-muted-foreground" />
           </div>
@@ -199,9 +195,15 @@ export function TechnicalPanel() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <Badge className={getVerdictColor()}>
-                {currentVersion.verdict}
-              </Badge>
+              {currentVersion.verdict === "Não apto" ? (
+                <Badge variant="destructive">
+                  {currentVersion.verdict}
+                </Badge>
+              ) : (
+                <Badge className={getVerdictColor()}>
+                  {currentVersion.verdict}
+                </Badge>
+              )}
               
               <div className="space-y-1">
                 <p className="text-xs font-medium">Baseado em:</p>
@@ -222,12 +224,12 @@ export function TechnicalPanel() {
         </Card>
 
         {/* Informação sobre congelamento */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+        <div className="bg-muted/50 border border-border rounded-lg p-3">
           <div className="flex items-start space-x-2">
-            <Lock className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+            <Lock className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
             <div className="text-sm">
-              <p className="font-medium text-blue-800">Resultados Congelados</p>
-              <p className="text-blue-600 mt-1">
+              <p className="font-medium">Resultados Congelados</p>
+              <p className="text-muted-foreground mt-1">
                 Estes dados foram calculados em {formatDate(currentVersion.date)} e não podem ser editados. 
                 Use &ldquo;Reprocessar&rdquo; para gerar novos resultados.
               </p>

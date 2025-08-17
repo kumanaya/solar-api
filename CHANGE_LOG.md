@@ -340,3 +340,113 @@
 - **Toast Provider**: Configurado no layout principal
 - **Context Access**: Utiliza dados da análise atual
 - **Metrics Ready**: Preparado para integração com analytics real
+
+## Tela de Detalhe da Análise - 17/08/2025
+
+### ✅ Implementação Completa da Tela de Revisão
+
+#### 📋 Header Informativo
+- **Endereço Completo**: Título principal com ícone de localização
+- **Metadados Temporais**: Data de criação e última atualização
+- **Selo de Confiança**: Badge colorido (Alta/Média/Baixa) com tooltip
+- **Chips de Fontes**: PVGIS, NASA, Solcast, Google com cores específicas
+- **Informações de Reprocessamento**: Banner com contador e variação percentual
+
+#### 🗺️ Mapa com Polígono Salvo
+- **Visualização Somente Leitura**: Mapa fixo com polígono destacado
+- **Polígono Salvo**: Área em azul com bordas destacadas e label informativo
+- **Coordenadas**: Display das coordenadas GPS precisas
+- **Controles de Zoom**: Botões + e - funcionais
+- **Legenda**: Informações de área total, fator de uso e área útil
+- **Overlay de Status**: Indicador "Somente Leitura" no canto superior
+
+#### 🔒 Painel Técnico Bloqueado
+- **Resultados Congelados**: Todos os cards com ícone de cadeado
+- **Cards Técnicos Idênticos**: Mesma estrutura da Nova Análise
+- **Data de Cálculo**: Timestamp de quando foram calculados
+- **Informação de Bloqueio**: Banner explicativo sobre resultados congelados
+- **Parâmetros Salvos**: Fator de uso, inclinação e configurações utilizadas
+
+#### 🎯 Botões de Ação Completos
+
+##### 📄 **Gerar PDF**
+- **Modal Integrado**: Mesmo modal da Nova Análise com configurações
+- **Dados Atuais**: Utiliza dados da versão atual da análise
+- **Opções Completas**: Idioma, proposta comercial, observações
+
+##### 🔄 **Reprocessar**
+- **Modal de Parâmetros**: Configuração de fontes e parâmetros
+- **Fator de Uso**: Slider editável (50-95%) com feedback visual
+- **Inclinação**: Toggle automático ou manual com input de graus
+- **Fonte Preferida**: Dropdown PVGIS/NASA/Solcast
+- **Atualizar Polígono**: Switch para buscar dados mais recentes
+- **Progresso Visual**: 3 etapas (fontes → cálculo → validação)
+
+##### 📋 **Duplicar**
+- **Cópia Rápida**: Cria nova análise baseada na atual
+- **Preserva Parâmetros**: Mantém configurações da análise original
+- **Feedback Visual**: Loading e confirmação de sucesso
+
+#### 📊 Timeline de Histórico (Side Panel)
+
+##### 🔢 **Estatísticas Gerais**
+- **Total de Versões**: Contador de reprocessamentos
+- **Variação de Produção**: Percentual entre maior e menor valor
+- **Produção Média**: Média de todas as versões
+- **Último Reprocessamento**: Data da última atualização
+
+##### 📅 **Timeline Cronológica**
+- **Ordem Reversa**: Versão mais recente no topo
+- **Cards por Versão**: Cada reprocessamento em card individual
+- **Badges de Status**: Confiança e veredicto com cores
+- **Métricas por Versão**: Área, irradiação, produção estimada
+- **Variação Percentual**: Comparação com versão anterior
+- **Fontes e Parâmetros**: Detalhes técnicos de cada versão
+- **Indicadores Visuais**: Ícones de melhora/redução/estabilidade
+
+### 🎨 Interface e UX
+
+#### 💡 **Experiência do Usuário**
+- **Navegação Clara**: Botão "Voltar" e breadcrumb
+- **Estados Visuais**: Loading, congelado, ativo com ícones apropriados
+- **Feedback Instantâneo**: Toasts e progress bars em todas as ações
+- **Layout Adaptativo**: 65% mapa, 35% painel, timeline lateral opcional
+
+#### 🔄 **Interações Avançadas**
+- **Modal de Reprocessamento**: Configuração completa de parâmetros
+- **Timeline Lateral**: Toggle de histórico com estatísticas
+- **Estados de Loading**: Skeletons durante carregamento
+- **Error Handling**: Estados de erro graceful com retry
+
+### 📊 **Métricas Implementadas**
+- **Reprocessamentos por Mês**: Tracking de frequência de atualizações
+- **Variação de Resultados**: Percentual de mudança entre versões
+- **Parâmetros Utilizados**: Configurações mais comuns
+- **Fontes de Dados**: Preferências e disponibilidade
+- **Tempo de Análise**: Duração do processo de reprocessamento
+
+### 🛠️ **Arquitetura Técnica**
+
+#### 📦 **Componentes Modulares**
+- **AnalysisDetailProvider**: Context específico para análise detalhada
+- **6 Componentes Especializados**: Header, Mapa, Painel, Ações, Modal, Timeline
+- **Roteamento Dinâmico**: `/dashboard/analysis/[id]` com parâmetro dinâmico
+
+#### 🔧 **Estado Gerenciado**
+- **Context Isolado**: Estado independente por análise
+- **História de Versões**: Array completo de reprocessamentos
+- **Mock Data Generator**: Geração de dados realistas para demonstração
+- **TypeScript Interfaces**: Tipagem completa de todas as estruturas
+
+#### ⚡ **Performance**
+- **Lazy Loading**: Componentes carregados sob demanda
+- **Mock APIs**: Simulação de chamadas `/analyze` e endpoints
+- **Optimistic Updates**: UI responsiva durante operações
+- **Memory Management**: Cleanup automático de estados
+
+### 🚀 **Integração Completa**
+- **Roteamento**: Integrado ao sistema de navegação
+- **PDF Modal**: Reutilização do modal da Nova Análise
+- **Toast System**: Notificações consistentes em toda aplicação
+- **Context Sharing**: Dados compartilhados entre componentes
+- **API Ready**: Preparado para integração com endpoints reais

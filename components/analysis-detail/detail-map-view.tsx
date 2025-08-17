@@ -7,9 +7,9 @@ export function DetailMapView() {
 
   if (isLoading || !analysis) {
     return (
-      <div className="h-full w-full bg-gray-100 relative overflow-hidden">
-        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-gray-200 via-gray-100 to-gray-50" />
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-4 shadow-lg">
+      <div className="h-full w-full bg-muted relative overflow-hidden">
+        <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-muted via-muted/80 to-muted/60" />
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-background rounded-lg p-4 shadow-lg border">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto mb-2"></div>
           <p className="text-sm text-muted-foreground">Carregando mapa...</p>
         </div>
@@ -18,25 +18,25 @@ export function DetailMapView() {
   }
 
   return (
-    <div className="h-full w-full bg-gray-100 relative overflow-hidden">
+    <div className="h-full w-full bg-muted relative overflow-hidden">
       {/* Mapa base simulado */}
       <div className="h-full w-full bg-gradient-to-br from-green-800 via-green-600 to-green-400">
         {/* Grid simulando imagem satelital */}
         <div 
-          className="absolute inset-0 opacity-30"
+          className="absolute inset-0 opacity-20"
           style={{
             backgroundImage: `
               linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
               linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px)
             `,
-            backgroundSize: "20px 20px"
+            backgroundSize: "50px 50px"
           }}
         />
 
         {/* Marcador de coordenadas */}
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-          <div className="w-3 h-3 bg-red-500 rounded-full shadow-lg" />
-          <div className="w-6 h-6 border-2 border-red-500 rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
+          <div className="w-3 h-3 bg-destructive rounded-full shadow-lg animate-pulse" />
+          <div className="w-6 h-6 border-2 border-destructive rounded-full absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" />
         </div>
 
         {/* Polígono salvo - destaque especial */}
@@ -52,18 +52,18 @@ export function DetailMapView() {
           }}
         >
           {/* Label do polígono */}
-          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-white px-3 py-2 rounded-lg shadow-lg border">
+          <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-background px-3 py-2 rounded-lg shadow-lg border">
             <div className="text-center">
-              <p className="text-sm font-medium text-blue-800">Polígono Salvo</p>
+              <p className="text-sm font-medium">Polígono Salvo</p>
               <p className="text-xs text-muted-foreground">{analysis.polygon.area}m²</p>
             </div>
             {/* Seta apontando para o polígono */}
-            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white"></div>
+            <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-background"></div>
           </div>
         </div>
 
         {/* Coordenadas no canto superior esquerdo */}
-        <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+        <div className="absolute top-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border">
           <div className="text-xs space-y-1">
             <p className="font-medium">Coordenadas</p>
             <p className="text-muted-foreground">
@@ -73,14 +73,14 @@ export function DetailMapView() {
         </div>
 
         {/* Indicador de zoom no canto inferior direito */}
-        <div className="absolute bottom-4 right-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+        <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border">
           <div className="text-xs space-y-2">
             <p className="font-medium text-center">Zoom</p>
             <div className="flex flex-col space-y-1">
-              <button className="w-8 h-8 bg-white border rounded flex items-center justify-center hover:bg-gray-50">
+              <button className="w-8 h-8 bg-background border rounded flex items-center justify-center hover:bg-muted">
                 +
               </button>
-              <button className="w-8 h-8 bg-white border rounded flex items-center justify-center hover:bg-gray-50">
+              <button className="w-8 h-8 bg-background border rounded flex items-center justify-center hover:bg-muted">
                 −
               </button>
             </div>
@@ -88,7 +88,7 @@ export function DetailMapView() {
         </div>
 
         {/* Legenda do polígono */}
-        <div className="absolute bottom-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg p-3 shadow-lg">
+        <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border">
           <div className="text-xs space-y-2">
             <p className="font-medium">Legenda</p>
             <div className="flex items-center space-x-2">
@@ -104,9 +104,9 @@ export function DetailMapView() {
         </div>
 
         {/* Overlay de "congelado" para indicar que não é editável */}
-        <div className="absolute top-4 right-4 bg-yellow-50 border border-yellow-200 rounded-lg p-2 shadow-lg">
-          <div className="flex items-center space-x-2 text-yellow-800">
-            <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+        <div className="absolute top-4 right-4 bg-muted/90 border border-border rounded-lg p-2 shadow-lg">
+          <div className="flex items-center space-x-2 text-muted-foreground">
+            <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
             <span className="text-xs font-medium">Visualização Somente Leitura</span>
           </div>
         </div>

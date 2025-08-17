@@ -22,7 +22,7 @@ export function LayerToggles({
   onReliefToggle
 }: LayerTogglesProps) {
   return (
-    <div className="bg-white rounded-lg shadow-lg border p-3 space-y-3">
+    <div className="bg-background rounded-lg shadow-lg border p-3 space-y-3">
       <div className="flex items-center space-x-2">
         <Layers className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Camadas</span>
