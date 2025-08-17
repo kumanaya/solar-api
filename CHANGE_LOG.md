@@ -256,3 +256,87 @@
 - **Context Providers**: Estado isolado por sessão
 - **Simulate APIs**: Pronto para integração com APIs reais
 - **Performance**: Otimizado para resposta ≤ 5 segundos
+
+## Modal "Gerar PDF do Laudo" - 17/08/2025
+
+### ✅ Modal Completo para Geração de PDF
+
+#### 🎛️ Configurações do PDF
+- **Switch Proposta Comercial**: Toggle para incluir orçamento automático via `/pricing`
+- **Seleção de Idioma**: PT-BR (padrão), English, Español
+- **Campo Observações**: Textarea opcional (500 caracteres) para comentários especiais
+- **Validação**: Contador de caracteres e limitação de entrada
+
+#### ⚡ Processo de Geração (≤ 5s)
+- **Progresso Visual**: Barra com 3 etapas simuladas
+  1. **Texto**: "Processando dados técnicos..."
+  2. **Composição**: "Montando estrutura do documento..."
+  3. **Render**: "Renderizando PDF final..."
+- **Spinner + Timer**: Indicação "≈ 5 segundos" durante processo
+- **Progress Bar**: Animação gradual de 0-100% com feedback visual
+
+#### 🎯 Estados e Interações
+
+##### ✅ Estado de Sucesso
+- **Ícone de Sucesso**: CheckCircle verde com confirmação visual
+- **Toast Notification**: "PDF gerado com sucesso!" com ação de download
+- **Botões de Ação**:
+  - **"Baixar PDF"**: Download direto do arquivo
+  - **"Abrir no Navegador"**: Visualização em nova aba
+
+##### ❌ Estado de Erro
+- **Ícone de Erro**: AlertCircle vermelho
+- **Mensagem**: "Algo deu errado ao gerar o PDF"
+- **Ações de Recuperação**:
+  - **"Tentar Novamente"**: Reinicia o processo
+  - **"Cancelar"**: Fecha o modal
+
+#### 📊 Métricas Implementadas
+- **Taxa de Geração de PDF**: Sucesso/falha por tentativa
+- **Tempo de Render**: Medição do processo completo
+- **Cliques em Download**: Tracking de downloads efetivos
+- **Cliques em "Abrir no Navegador"**: Tracking de visualizações
+- **Configurações**: Idioma, inclusão de proposta, tamanho de observações
+
+### 🎨 Interface e UX
+
+#### 💬 Microcopy e Feedback
+- **Descrição Clara**: "Configure as opções do seu relatório técnico"
+- **Tooltips Informativos**: Explicação sobre proposta comercial
+- **Feedback em Tempo Real**: Contador de caracteres nas observações
+- **Estados Visuais**: Ícones e cores apropriados para cada estado
+
+#### 🔄 Fluxo de Interação
+1. **Configuração**: Usuário define opções (proposta, idioma, observações)
+2. **Geração**: Processo visual com 3 etapas e progresso
+3. **Resultado**: Sucesso com opções de download ou erro com retry
+4. **Métricas**: Tracking automático de todas as interações
+
+### 🛠️ Implementação Técnica
+
+#### 📦 Componentes Utilizados
+- **Dialog**: Modal responsivo do shadcn/ui
+- **Switch**: Toggle para proposta comercial
+- **Select**: Dropdown de idiomas
+- **Textarea**: Campo de observações com limite
+- **Progress**: Barra de progresso animada
+- **Toast (Sonner)**: Notificações não-bloqueantes
+
+#### 🔧 Funcionalidades
+- **Estado Controlado**: React hooks para todos os inputs
+- **Simulação de API**: Mock de chamada `/pricing` quando incluir proposta
+- **Progress Simulation**: Animação realista de 3 etapas
+- **Error Handling**: Estados de erro graceful com retry
+- **URL Simulation**: Mock de PDF gerado para download
+
+#### ⚡ Performance
+- **Async/Await**: Operações não-bloqueantes
+- **Optimistic UI**: Feedback instantâneo de ações
+- **Estado Isolado**: Reset automático ao fechar modal
+- **Memory Management**: Cleanup de timers e estados
+
+### 🚀 Integração
+- **Action Buttons**: Integrado ao painel de resultados da análise
+- **Toast Provider**: Configurado no layout principal
+- **Context Access**: Utiliza dados da análise atual
+- **Metrics Ready**: Preparado para integração com analytics real
