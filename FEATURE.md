@@ -1,20 +1,30 @@
-# Dashboard Feature
+# Nova Análise Solar - Tela Principal
 
 ## Descrição
-Criar uma tela de dashboard que será exibida após o usuário fazer login. Esta será a página principal do sistema onde o usuário poderá visualizar informações gerais e navegar para outras funcionalidades.
+Tela principal para análise de viabilidade solar que transforma um endereço em resultado acionável em ≤ 5 segundos.
 
 ## Objetivos
-- Criar rota /dashboard
-- Implementar layout responsivo
-- Configurar redirecionamento automático após login
-- Implementar navegação entre seções
+- Interface rápida e intuitiva
+- Resultados precisos com múltiplas fontes de dados
+- Interação visual com mapa e polígonos
+- Feedback instantâneo e optimistic updates
 
-## Componentes
-- Layout do dashboard
-- Header com informações do usuário
-- Sidebar para navegação
-- Área de conteúdo principal
-- Cards informativos
+## Layout Desktop
+
+### Coluna Esquerda (65% - Mapa)
+- ✅ Busca de endereço fixo no topo
+- ✅ Mapa com camadas satélite/ruas
+- ✅ Marcador de coordenadas
+- 🔄 Layer Footprints clicáveis
+- 🔄 Modo desenho de telhado
+- 🔄 Toggles de camadas (sombra NDVI, relevo DEM)
+
+### Coluna Direita (35% - Painel)
+- ✅ Status de cobertura e selo de confiança
+- ✅ Cards de resultado técnico
+- ✅ Estimativas e métricas
+- ✅ Botões de ação
+- 🔄 Tooltips explicativos
 
 ## Status
-Em desenvolvimento
+🔄 Em desenvolvimento

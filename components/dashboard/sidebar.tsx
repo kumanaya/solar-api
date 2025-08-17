@@ -23,6 +23,11 @@ const sidebarItems = [
     icon: Home,
   },
   {
+    title: "Nova Análise",
+    href: "/dashboard/analysis",
+    icon: BarChart3,
+  },
+  {
     title: "Usuários",
     href: "/dashboard/users",
     icon: Users,
@@ -30,7 +35,7 @@ const sidebarItems = [
   {
     title: "Relatórios",
     href: "/dashboard/reports",
-    icon: BarChart3,
+    icon: FileText,
   },
   {
     title: "Documentos",

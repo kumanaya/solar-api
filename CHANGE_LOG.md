@@ -176,3 +176,83 @@
 - Async/await para simulação de operações
 - TypeScript com tipagem completa
 - Integração com sistema de design existente
+
+## Tela Nova Análise Solar - 17/08/2025
+
+### ✅ Implementação Completa da Tela Principal
+
+#### 🗺️ Coluna Esquerda (65% - Mapa)
+- **Busca de Endereço**: Campo fixo no topo com busca inteligente
+- **Mapa Interativo**: Simulação com camadas satélite/ruas
+- **Marcador de Coordenadas**: Indicação visual da localização
+- **Footprints Clicáveis**: Polígonos de telhado com seleção ativa
+- **Modo Desenho**: Toolbar para desenhar telhados manualmente
+- **Controles de Camada**: Toggles para sombra (NDVI) e relevo (DEM)
+
+#### 📊 Coluna Direita (35% - Painel de Resultados)
+- **Status de Cobertura**: Indicação de fonte de dados e fallbacks
+- **Selo de Confiança**: Alta/Média/Baixa com tooltips explicativos
+- **Cards de Resultados Técnicos**:
+  - Área útil com fator de uso editável
+  - Irradiação anual GHI com fonte
+  - Índice de sombreamento e perdas
+  - Estimativa de produção destacada
+  - Veredicto com razões (chips)
+
+### 🎯 Funcionalidades Implementadas
+
+#### ⚡ Performance (≤ 5 segundos)
+- **Optimistic Updates**: Recálculo instantâneo ao alterar parâmetros
+- **Loading States**: Skeletons durante carregamento
+- **Mock de APIs**: Simulação de análise em 2 segundos
+
+#### 🔄 Interações Avançadas
+- **Seleção de Footprint**: Clique para ativar polígono
+- **Fator de Uso**: Slider editável (50-95%) com recálculo em tempo real
+- **Desenho Manual**: Modo com instruções e toolbar completa
+- **Camadas Visuais**: Toggles para sombra e relevo
+
+#### 📱 Estados e Feedback
+- **Loading Inicial**: Skeleton nos cards e shimmer no mapa
+- **Banners de Erro**: Não bloqueantes com tentativa de fonte alternativa
+- **Modal Sem Créditos**: Bloqueante com opções de upgrade
+- **Callouts**: CTA para desenhar telhado quando necessário
+
+### 🎨 Interface e UX
+
+#### 💬 Microcopy Inteligente
+- **Confiança Alta**: "Dados de footprint + irradiância validados"
+- **Confiança Média**: "Área confirmada, irradiância estimada"
+- **Confiança Baixa**: "Dados limitados. Considere desenhar manualmente"
+- **Tooltips**: Fórmulas curtas para cada métrica
+
+#### 🎯 Ações Principais
+- **Gerar PDF**: Laudo completo com dados técnicos
+- **Adicionar Proposta**: Integração com pricing automático
+- **Salvar Análise**: Persistência para histórico
+
+### 🛠️ Arquitetura Técnica
+
+#### 📦 Componentes Modulares
+- **AnalysisProvider**: Context para estado global
+- **MapPanel**: Coluna esquerda com mapa e controles
+- **ResultsPanel**: Coluna direita com dados técnicos
+- **8 Sub-componentes**: Especializados por funcionalidade
+
+#### 🔧 Estado Gerenciado
+- **React Context**: Estado centralizado da análise
+- **TypeScript Interfaces**: Tipagem completa dos dados
+- **Real-time Updates**: Recálculo automático de métricas
+- **Error Handling**: Estados de erro graceful
+
+#### 📐 Layout Responsivo
+- **65/35 Split**: Otimizado para análise visual + dados
+- **Fixed Elements**: Busca sempre visível
+- **Z-index Layers**: Controles sobrepostos organizados
+- **Mobile Ready**: Preparado para adaptação mobile
+
+### 🚀 Integração
+- **Roteamento**: Adicionado ao sidebar como "Nova Análise"
+- **Context Providers**: Estado isolado por sessão
+- **Simulate APIs**: Pronto para integração com APIs reais
+- **Performance**: Otimizado para resposta ≤ 5 segundos
