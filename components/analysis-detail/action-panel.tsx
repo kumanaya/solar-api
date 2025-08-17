@@ -130,7 +130,31 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
       <PDFModal 
         isOpen={isPDFModalOpen} 
         onClose={() => setIsPDFModalOpen(false)}
-        analysisData={analysis.currentVersion}
+        analysisData={{
+          address: analysis.address,
+          coordinates: analysis.coordinates,
+          coverage: {
+            google: analysis.sources.google,
+            fallback: analysis.sources.nasa ? "NASA SRTM" : "Dados indisponíveis"
+          },
+          confidence: analysis.currentVersion.confidence,
+          usableArea: analysis.currentVersion.usableArea,
+          areaSource: "manual",
+          annualIrradiation: analysis.currentVersion.annualIrradiation,
+          irradiationSource: analysis.currentVersion.sources[0] || "PVGIS",
+          shadingIndex: 0,
+          shadingLoss: 0,
+          estimatedProduction: analysis.currentVersion.estimatedProduction,
+          verdict: analysis.currentVersion.verdict,
+          reasons: [],
+          footprints: [{
+            id: "main",
+            coordinates: analysis.polygon.coordinates,
+            area: analysis.polygon.area,
+            isActive: true
+          }],
+          usageFactor: analysis.currentVersion.parameters.usageFactor
+        }}
       />
     </>
   );
