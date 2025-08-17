@@ -160,7 +160,10 @@ export function AnalysisDetailProvider({
         estimatedProduction: Math.floor((120 + Math.random() * 80) * (1400 + Math.random() * 400) * 0.15),
         verdict: ["Apto", "Parcial", "Não apto"][Math.floor(Math.random() * 3)] as "Apto" | "Parcial" | "Não apto",
         sources: ["PVGIS", "NASA SRTM", "Solcast"],
-        parameters,
+        parameters: {
+          usageFactor: (parameters.usageFactor as number) || 0.75,
+          tiltEstimated: parameters.tiltEstimated as number | undefined
+        },
         variationFromPrevious: (Math.random() - 0.5) * 15
       };
 
