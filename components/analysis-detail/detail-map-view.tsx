@@ -63,7 +63,7 @@ export function DetailMapView() {
         </div>
 
         {/* Coordenadas no canto superior esquerdo */}
-        <div className="absolute top-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border">
+        <div className="absolute top-2 md:top-4 left-2 md:left-4 bg-background/90 backdrop-blur-sm rounded-lg p-2 md:p-3 shadow-lg border">
           <div className="text-xs space-y-1">
             <p className="font-medium">Coordenadas</p>
             <p className="text-muted-foreground">
@@ -73,7 +73,7 @@ export function DetailMapView() {
         </div>
 
         {/* Indicador de zoom no canto inferior direito */}
-        <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border">
+        <div className="absolute bottom-2 md:bottom-4 right-2 md:right-4 bg-background/90 backdrop-blur-sm rounded-lg p-2 md:p-3 shadow-lg border">
           <div className="text-xs space-y-2">
             <p className="font-medium text-center">Zoom</p>
             <div className="flex flex-col space-y-1">
@@ -88,7 +88,7 @@ export function DetailMapView() {
         </div>
 
         {/* Legenda do polígono */}
-        <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border">
+        <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 bg-background/90 backdrop-blur-sm rounded-lg p-2 md:p-3 shadow-lg border">
           <div className="text-xs space-y-2">
             <p className="font-medium">Legenda</p>
             <div className="flex items-center space-x-2">
@@ -104,7 +104,7 @@ export function DetailMapView() {
         </div>
 
         {/* Overlay de "congelado" para indicar que não é editável */}
-        <div className="absolute top-4 right-4 bg-muted/90 border border-border rounded-lg p-2 shadow-lg">
+        <div className="absolute top-2 md:top-4 right-2 md:right-4 bg-muted/90 border border-border rounded-lg p-2 shadow-lg">
           <div className="flex items-center space-x-2 text-muted-foreground">
             <div className="w-2 h-2 bg-muted-foreground rounded-full"></div>
             <span className="text-xs font-medium">Visualização Somente Leitura</span>

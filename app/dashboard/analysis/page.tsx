@@ -27,7 +27,8 @@ export default function AnalysisPage() {
 
   return (
     <AnalysisProvider>
-      <div className="flex h-screen overflow-hidden">
+      {/* Layout Desktop: lado a lado */}
+      <div className="hidden md:flex h-screen overflow-hidden">
         {/* Coluna esquerda - Mapa (65%) */}
         <div className="flex-1 w-[65%] relative">
           <MapPanel />
@@ -35,6 +36,19 @@ export default function AnalysisPage() {
         
         {/* Coluna direita - Painel de resultados (35%) */}
         <div className="w-[35%] border-l bg-background overflow-y-auto">
+          <ResultsPanel />
+        </div>
+      </div>
+
+      {/* Layout Mobile: mapa acima, resultados abaixo */}
+      <div className="md:hidden flex flex-col h-screen overflow-hidden">
+        {/* Mapa - metade superior */}
+        <div className="flex-1 relative">
+          <MapPanel />
+        </div>
+        
+        {/* Painel de resultados - metade inferior */}
+        <div className="flex-1 border-t bg-background overflow-y-auto">
           <ResultsPanel />
         </div>
       </div>

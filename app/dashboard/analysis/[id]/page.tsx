@@ -35,7 +35,8 @@ export default function AnalysisDetailPage() {
 
   return (
     <AnalysisDetailProvider analysisId={analysisId}>
-      <div className="flex h-screen overflow-hidden">
+      {/* Layout Desktop */}
+      <div className="hidden md:flex h-screen overflow-hidden">
         {/* Coluna principal */}
         <div className="flex-1 flex flex-col">
           {/* Header */}
@@ -64,10 +65,36 @@ export default function AnalysisDetailPage() {
             <HistoryTimeline onClose={() => setShowHistory(false)} />
           </div>
         )}
-
-        {/* Modal de reprocessamento */}
-        <ReprocessModal />
       </div>
+
+      {/* Layout Mobile */}
+      <div className="md:hidden flex flex-col h-screen overflow-hidden">
+        {/* Header */}
+        <AnalysisHeader />
+        
+        {/* Mapa - parte superior */}
+        <div className="flex-1 relative">
+          <DetailMapView />
+        </div>
+        
+        {/* Painel técnico - parte inferior */}
+        <div className="flex-1 border-t bg-background overflow-y-auto">
+          <TechnicalPanel />
+        </div>
+        
+        {/* Actions fixas na parte inferior */}
+        <ActionPanel onToggleHistory={() => setShowHistory(!showHistory)} />
+
+        {/* Timeline em modal para mobile */}
+        {showHistory && (
+          <div className="absolute inset-0 bg-background z-50">
+            <HistoryTimeline onClose={() => setShowHistory(false)} />
+          </div>
+        )}
+      </div>
+
+      {/* Modal de reprocessamento */}
+      <ReprocessModal />
     </AnalysisDetailProvider>
   );
 }

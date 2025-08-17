@@ -42,11 +42,6 @@ export function AnalysisHeader() {
     });
   };
 
-  const getSourceColor = (source: string) => {
-    // Remover cores customizadas - usar apenas variant outline padrão
-    return "";
-  };
-
   return (
     <div className="border-b bg-background">
       <div className="p-4 space-y-4">
