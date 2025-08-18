@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Search, MapPin, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useAnalysis } from "./analysis-context";
+import { useAnalysis, ConfidenceLevel, Verdict } from "./analysis-context";
 
 export function AddressSearch() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,7 +30,7 @@ export function AddressSearch() {
           google: Math.random() > 0.3,
           fallback: "Usando dados NASA SRTM"
         },
-        confidence: Math.random() > 0.5 ? "Alta" : Math.random() > 0.3 ? "Média" : "Baixa",
+        confidence: (Math.random() > 0.5 ? "Alta" : Math.random() > 0.3 ? "Média" : "Baixa") as ConfidenceLevel,
         usableArea: Math.floor(Math.random() * 200) + 50,
         areaSource: "footprint" as const,
         annualIrradiation: Math.floor(Math.random() * 500) + 1400,
@@ -38,7 +38,7 @@ export function AddressSearch() {
         shadingIndex: Math.random() * 0.3,
         shadingLoss: Math.floor(Math.random() * 15),
         estimatedProduction: Math.floor(Math.random() * 5000) + 2000,
-        verdict: Math.random() > 0.3 ? "Apto" : Math.random() > 0.5 ? "Parcial" : "Não apto",
+        verdict: (Math.random() > 0.3 ? "Apto" : Math.random() > 0.5 ? "Parcial" : "Não apto") as Verdict,
         reasons: ["Boa irradiação solar", "Área suficiente", "Baixo sombreamento"],
         footprints: [
           {
@@ -52,7 +52,8 @@ export function AddressSearch() {
             area: Math.floor(Math.random() * 100) + 80,
             isActive: true
           }
-        ]
+        ],
+        usageFactor: 0.75
       };
 
       updateData(mockData);
