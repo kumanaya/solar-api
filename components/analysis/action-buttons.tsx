@@ -80,8 +80,8 @@ export function ActionButtons() {
 
         {/* Informações adicionais */}
         <div className="text-xs text-muted-foreground text-center pt-2 border-t">
-          <p>💡 O PDF incluirá todos os dados técnicos e o veredicto</p>
-          <p>💰 A proposta comercial será calculada automaticamente</p>
+          <p>O PDF incluirá todos os dados técnicos e o veredicto</p>
+          <p>A proposta comercial será calculada automaticamente</p>
         </div>
       </div>
 
