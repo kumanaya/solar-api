@@ -86,9 +86,7 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
       setIsMapLoaded(true);
     });
 
-    // Add navigation controls
-    map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
-    
+    // Don't add navigation controls (zoom and compass) - removed per user request
     // Don't add default attribution control - we'll create a custom one
 
     return () => {
@@ -374,15 +372,20 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
           }
         }
         
-        /* Navigation controls positioning */
-        .maplibregl-ctrl-top-right {
-          top: 50px !important;
-          right: 8px !important;
+        /* Hide all MapLibre controls */
+        .maplibregl-ctrl-top-right,
+        .maplibregl-ctrl-top-left,
+        .maplibregl-ctrl-bottom-right,
+        .maplibregl-ctrl-bottom-left {
+          display: none !important;
         }
         
-        /* Ensure map controls have proper z-index */
-        .maplibregl-ctrl {
-          z-index: 1 !important;
+        .maplibregl-ctrl-nav,
+        .maplibregl-ctrl-zoom,
+        .maplibregl-ctrl-compass,
+        .maplibregl-ctrl-logo,
+        .maplibregl-ctrl-attrib {
+          display: none !important;
         }
       `}</style>
     </div>
