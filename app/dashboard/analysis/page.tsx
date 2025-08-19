@@ -4,15 +4,31 @@ import { useState, useEffect } from "react";
 import { MapPanel } from "@/components/analysis/map-panel";
 import { ResultsPanel } from "@/components/analysis/results-panel";
 import { AnalysisProvider } from "@/components/analysis/analysis-context";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export default function AnalysisPage() {
   const [isLoading, setIsLoading] = useState(true);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
     // Simular carregamento inicial
     const timer = setTimeout(() => setIsLoading(false), 1000);
+    
+    // Recuperar estado do sidebar do localStorage
+    const savedState = localStorage.getItem('analysis-sidebar-collapsed');
+    if (savedState !== null) {
+      setIsSidebarCollapsed(JSON.parse(savedState));
+    }
+    
     return () => clearTimeout(timer);
   }, []);
+
+  const toggleSidebar = () => {
+    const newState = !isSidebarCollapsed;
+    setIsSidebarCollapsed(newState);
+    localStorage.setItem('analysis-sidebar-collapsed', JSON.stringify(newState));
+  };
 
   if (isLoading) {
     return (
@@ -28,15 +44,42 @@ export default function AnalysisPage() {
   return (
     <AnalysisProvider>
       {/* Layout Desktop: lado a lado */}
-      <div className="hidden md:flex h-screen overflow-hidden">
-        {/* Coluna esquerda - Mapa (65%) */}
-        <div className="flex-1 w-[65%] relative">
+      <div className="hidden md:flex h-screen max-w-full overflow-hidden">
+        {/* Coluna esquerda - Mapa (flexível) */}
+        <div 
+          className={`relative transition-all duration-300 ${
+            isSidebarCollapsed 
+              ? 'flex-1' 
+              : 'flex-1 max-w-[calc(100%-320px)]'
+          }`}
+        >
           <MapPanel />
+          
+          {/* Botão de toggle no mapa - alinhado com o input */}
+          <Button
+            variant="secondary"
+            size="sm"
+            className="absolute top-2 md:top-4 right-2 md:right-4 z-30 shadow-lg hover:shadow-xl transition-shadow h-10"
+            onClick={toggleSidebar}
+            title={isSidebarCollapsed ? "Mostrar painel" : "Ocultar painel"}
+          >
+            {isSidebarCollapsed ? (
+              <ChevronLeft className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+          </Button>
         </div>
         
-        {/* Coluna direita - Painel de resultados (35%) */}
-        <div className="w-[35%] border-l bg-background overflow-y-auto">
-          <ResultsPanel />
+        {/* Coluna direita - Painel de resultados (largura fixa) */}
+        <div 
+          className={`border-l bg-background transition-all duration-300 flex-shrink-0 ${
+            isSidebarCollapsed 
+              ? 'w-0 opacity-0 overflow-hidden' 
+              : 'w-80 opacity-100 overflow-y-auto'
+          }`}
+        >
+          {!isSidebarCollapsed && <ResultsPanel />}
         </div>
       </div>
 

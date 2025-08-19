@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useAnalysis } from "./analysis-context";
+import { Info, X } from "lucide-react";
 
 interface MapLibreMapProps {
   layer: "satellite" | "streets";
@@ -65,6 +66,7 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
   const { data } = useAnalysis();
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<string>(layer);
+  const [showAttribution, setShowAttribution] = useState(false);
 
   // Initialize map
   useEffect(() => {
@@ -87,10 +89,7 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
     // Add navigation controls
     map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
     
-    // Add attribution control
-    map.current.addControl(new maplibregl.AttributionControl({
-      compact: true
-    }), 'bottom-right');
+    // Don't add default attribution control - we'll create a custom one
 
     return () => {
       if (map.current) {
@@ -324,8 +323,46 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
         </div>
       )}
 
-      {/* CSS for marker animation */}
-      <style jsx>{`
+      {/* Custom Attribution Control */}
+      <div className="absolute bottom-2 right-2 z-20">
+        {/* Attribution toggle button */}
+        <button
+          onClick={() => setShowAttribution(!showAttribution)}
+          className="bg-background/80 backdrop-blur-sm border rounded p-1.5 shadow-sm hover:bg-background transition-colors"
+          title="Informações do mapa"
+        >
+          {showAttribution ? (
+            <X className="h-3 w-3 text-muted-foreground" />
+          ) : (
+            <Info className="h-3 w-3 text-muted-foreground" />
+          )}
+        </button>
+
+        {/* Attribution panel */}
+        {showAttribution && (
+          <div className="absolute bottom-full right-0 mb-2 bg-background/95 backdrop-blur-sm border rounded-lg p-3 shadow-lg max-w-sm">
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              {layer === "satellite" ? (
+                <>
+                  <strong>Imagens de satélite:</strong><br />
+                  © Esri, DigitalGlobe, GeoEye, Earthstar Geographics, CNES/Airbus DS, USDA, USGS, AeroGRID, IGN, and the GIS User Community
+                </>
+              ) : (
+                <>
+                  <strong>Dados do mapa:</strong><br />
+                  © OpenStreetMap contributors
+                </>
+              )}
+              <br /><br />
+              <strong>Tecnologia:</strong><br />
+              MapLibre GL JS
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* CSS for marker animation and attribution styling */}
+      <style jsx global>{`
         @keyframes pulse {
           0%, 100% {
             transform: scale(1);
@@ -335,6 +372,17 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
             transform: scale(1.2);
             opacity: 0.8;
           }
+        }
+        
+        /* Navigation controls positioning */
+        .maplibregl-ctrl-top-right {
+          top: 50px !important;
+          right: 8px !important;
+        }
+        
+        /* Ensure map controls have proper z-index */
+        .maplibregl-ctrl {
+          z-index: 1 !important;
         }
       `}</style>
     </div>

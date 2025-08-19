@@ -15,7 +15,7 @@ export function MapPanel() {
   return (
     <div className="relative h-full w-full">
       {/* Busca de endereço - fixa no topo */}
-      <div className="absolute top-2 md:top-4 left-2 md:left-4 right-2 md:right-4 z-20">
+      <div className="absolute top-2 md:top-4 left-2 md:left-4 right-12 md:right-16 z-20">
         <AddressSearch />
       </div>
 
@@ -26,8 +26,9 @@ export function MapPanel() {
         </div>
       )}
 
-      {/* Controles de camada - canto inferior esquerdo */}
-      <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20">
+      {/* Controles lado esquerdo - empilhados */}
+      <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20 space-y-2">
+        {/* Controles de camada */}
         <LayerToggles
           mapLayer={mapLayer}
           onMapLayerChange={setMapLayer}
@@ -36,16 +37,14 @@ export function MapPanel() {
           showRelief={showRelief}
           onReliefToggle={setShowRelief}
         />
-      </div>
-
-      {/* Botão Desenhar telhado - canto inferior direito */}
-      <div className="absolute bottom-2 md:bottom-4 right-2 md:right-4 z-20">
+        
+        {/* Botão Desenhar telhado */}
         <button
           onClick={() => setIsDrawingMode(!isDrawingMode)}
-          className={`px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base ${
+          className={`w-full px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base shadow-lg ${
             isDrawingMode
               ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              : "bg-background text-foreground shadow-lg hover:bg-muted border"
+              : "bg-background text-foreground hover:bg-muted border"
           }`}
         >
           <span className="hidden md:inline">
