@@ -4,9 +4,7 @@ import { CoverageStatus } from "./coverage-status";
 import { TechnicalResults } from "./technical-results";
 import { ActionButtons } from "./action-buttons";
 import { useAnalysis } from "./analysis-context";
-import { AlertCircle, Zap, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
+import { AlertCircle } from "lucide-react";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 
 export function ResultsPanel() {
@@ -14,53 +12,6 @@ export function ResultsPanel() {
   
   const { isFootprintError } = useErrorHandler();
 
-  const performAnalysis = async () => {
-    if (!selectedAddress) return;
-    
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      console.log(`Starting analysis for address: ${selectedAddress}`);
-      console.log('Current data coordinates:', data.coordinates);
-      
-      // Call the real API
-      const result = await analyzeAddress(selectedAddress);
-      console.log('Analysis result:', result);
-      
-      if (!result.success) {
-        console.error('Analysis failed:', result.error);
-        setError(result.error || "Erro na análise do endereço");
-        return;
-      }
-      if (!result.data) {
-        setError("Dados de análise não recebidos");
-        return;
-      }
-      const frontendData = transformAnalysisData(result.data);
-      if (!frontendData) {
-        setError("Erro ao processar dados da análise");
-        return;
-      }
-      console.log('Analysis completed successfully:', frontendData);
-      
-      // Preserve current coordinates (where user placed the pin)
-      const currentCoordinates = data.coordinates;
-      updateData({
-        ...frontendData,
-        coordinates: currentCoordinates // Keep user's pin location
-      });
-      
-      // Mark that we have analysis results
-      setHasAnalysisResults(true);
-      
-    } catch (error) {
-      console.error('Analysis error:', error);
-      setError("Erro inesperado durante a análise. Tente novamente.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   // Modal de sem créditos
   if (!hasCredits) {
@@ -136,35 +87,6 @@ export function ResultsPanel() {
         {/* Status de cobertura */}
         <CoverageStatus />
 
-        {/* Analysis Button */}
-        {selectedAddress && (
-          <div className="bg-muted/50 border border-border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-foreground mb-1">Endereço selecionado</p>
-                <p className="text-xs text-muted-foreground truncate">{selectedAddress}</p>
-              </div>
-              <Button
-                onClick={performAnalysis}
-                disabled={isLoading}
-                size="sm"
-                className="ml-3 flex-shrink-0"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Analisando...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4 mr-2" />
-                    Realizar Análise
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* Resultados técnicos */}
         <TechnicalResults />

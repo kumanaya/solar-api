@@ -111,11 +111,8 @@ export function ActionButtons() {
     setError(null);
     
     try {
-      console.log('Running analysis with:', {
-        address: selectedAddress,
-        polygon: currentPolygon,
-        footprints: data.footprints
-      });
+      console.log(`Starting analysis for address: ${selectedAddress}`);
+      console.log('Current data coordinates:', data.coordinates);
       
       // Calculate usable area override from footprints if available
       let usableAreaOverride: number | undefined;
@@ -130,20 +127,33 @@ export function ActionButtons() {
         usableAreaOverride
       );
       
-      if (result.success && result.data) {
-        const transformedData = transformAnalysisData(result.data);
-        if (transformedData) {
-          updateData({
-            ...transformedData,
-            // Preserve existing footprints if analysis doesn't return them
-            footprints: result.data.footprints.length > 0 ? transformedData.footprints : data.footprints
-          });
-        }
-      } else {
-        // Usar sistema de códigos de erro padronizado
-        const errorInfo = handleError(result.error || 'Erro na análise', result.errorCode);
-        setError(errorInfo.userMessage);
+      if (!result.success) {
+        console.error('Analysis failed:', result.error);
+        setError(result.error || "Erro na análise do endereço");
+        return;
       }
+      if (!result.data) {
+        setError("Dados de análise não recebidos");
+        return;
+      }
+      
+      const transformedData = transformAnalysisData(result.data);
+      if (!transformedData) {
+        setError("Erro ao processar dados da análise");
+        return;
+      }
+      
+      console.log('Analysis completed successfully:', transformedData);
+      
+      // Preserve current coordinates (where user placed the pin)
+      const currentCoordinates = data.coordinates;
+      updateData({
+        ...transformedData,
+        coordinates: currentCoordinates, // Keep user's pin location
+        // Preserve existing footprints if analysis doesn't return them
+        footprints: result.data.footprints.length > 0 ? transformedData.footprints : data.footprints
+      });
+      
     } catch (error) {
       console.error('Analysis error:', error);
       setError(error instanceof Error ? error.message : 'Erro inesperado na análise');
@@ -154,7 +164,7 @@ export function ActionButtons() {
   };
   
   const hasFootprint = data.footprints.length > 0;
-  const canAnalyze = selectedAddress && (hasFootprint || currentPolygon);
+  const canAnalyze = selectedAddress;
 
   return (
     <>
@@ -217,8 +227,7 @@ export function ActionButtons() {
         <div className="text-xs text-muted-foreground text-center pt-2 border-t space-y-1">
           {!canAnalyze && (
             <p className="text-amber-600">
-              {!selectedAddress && "Selecione um endereço"}
-              {selectedAddress && data.footprints.length === 0 && !currentPolygon && "Busque footprint automático ou desenhe o telhado"}
+              Selecione um endereço para executar análise
             </p>
           )}
           {data.footprints.length > 0 && hasFootprintFromAction && (
