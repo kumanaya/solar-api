@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AddressSearch } from "./address-search";
 import { MapView } from "./map-view";
 import { DrawingToolbar } from "./drawing-toolbar";
@@ -16,6 +16,8 @@ export function MapPanel() {
   const [showShadow, setShowShadow] = useState(false);
   const [showRelief, setShowRelief] = useState(false);
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
+  const [showDrawingInstructions, setShowDrawingInstructions] = useState(false);
+  const [showPinInstructions, setShowPinInstructions] = useState(false);
 
   // Drawing toolbar functions
   const handleUndoLastPoint = () => {
@@ -31,16 +33,46 @@ export function MapPanel() {
     setDrawingCoordinates(coordinates);
   };
 
+  // Auto-hide drawing instructions after 5 seconds
+  useEffect(() => {
+    if (isDrawingMode) {
+      setShowDrawingInstructions(true);
+      const timer = setTimeout(() => {
+        setShowDrawingInstructions(false);
+      }, 5000); // 5 seconds
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowDrawingInstructions(false);
+    }
+  }, [isDrawingMode]);
+
+  // Auto-hide pin instructions after 5 seconds
+  useEffect(() => {
+    if (isPinMode) {
+      setShowPinInstructions(true);
+      const timer = setTimeout(() => {
+        setShowPinInstructions(false);
+      }, 5000); // 5 seconds
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowPinInstructions(false);
+    }
+  }, [isPinMode]);
+
   return (
     <div className="relative h-full w-full">
       {/* Busca de endereço - fixa no topo */}
-      <div className="absolute top-2 md:top-4 left-2 md:left-4 right-12 md:right-16 z-20">
-        <AddressSearch />
-      </div>
+      {!isDrawingMode && (
+        <div className="absolute top-2 md:top-4 left-2 md:left-4 right-12 md:right-16 z-20">
+          <AddressSearch />
+        </div>
+      )}
 
       {/* Toolbar de desenho - quando ativo */}
       {isDrawingMode && (
-        <div className="absolute top-16 md:top-20 left-2 md:left-4 z-20">
+        <div className="absolute top-2 md:top-4 left-2 md:left-4 z-20">
           <DrawingToolbar 
             onExit={() => setIsDrawingMode(false)}
             drawingCoordinates={drawingCoordinates}
@@ -52,36 +84,40 @@ export function MapPanel() {
 
       {/* Controles lado esquerdo - empilhados */}
       <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20 space-y-2">
-        {/* Controles de camada */}
-        <LayerToggles
-          mapLayer={mapLayer}
-          onMapLayerChange={setMapLayer}
-          showShadow={showShadow}
-          onShadowToggle={setShowShadow}
-          showRelief={showRelief}
-          onReliefToggle={setShowRelief}
-        />
+        {/* Controles de camada - ocultos no modo desenho */}
+        {!isDrawingMode && (
+          <LayerToggles
+            mapLayer={mapLayer}
+            onMapLayerChange={setMapLayer}
+            showShadow={showShadow}
+            onShadowToggle={setShowShadow}
+            showRelief={showRelief}
+            onReliefToggle={setShowRelief}
+          />
+        )}
         
-        {/* Botão Colocar Pin */}
-        <button
-          onClick={() => {
-            setIsPinMode(!isPinMode);
-            if (isDrawingMode) setIsDrawingMode(false);
-          }}
-          className={`w-full px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base shadow-lg flex items-center justify-center space-x-2 ${
-            isPinMode
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-background text-foreground hover:bg-muted border"
-          }`}
-        >
-          <MapPin className="h-4 w-4" />
-          <span className="hidden md:inline">
-            {isPinMode ? "Cancelar Pin" : "Colocar Pin"}
-          </span>
-          <span className="md:hidden">
-            {isPinMode ? "Cancelar" : "Pin"}
-          </span>
-        </button>
+        {/* Botão Colocar Pin - oculto no modo desenho */}
+        {!isDrawingMode && (
+          <button
+            onClick={() => {
+              setIsPinMode(!isPinMode);
+              if (isDrawingMode) setIsDrawingMode(false);
+            }}
+            className={`w-full px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base shadow-lg flex items-center justify-center space-x-2 ${
+              isPinMode
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "bg-background text-foreground hover:bg-muted border"
+            }`}
+          >
+            <MapPin className="h-4 w-4" />
+            <span className="hidden md:inline">
+              {isPinMode ? "Cancelar Pin" : "Colocar Pin"}
+            </span>
+            <span className="md:hidden">
+              {isPinMode ? "Cancelar" : "Pin"}
+            </span>
+          </button>
+        )}
         
         {/* Botão Desenhar telhado */}
         <button
@@ -116,18 +152,18 @@ export function MapPanel() {
       />
 
       {/* Instruções de desenho - quando ativo */}
-      {isDrawingMode && (
+      {showDrawingInstructions && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
-          <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm">
+          <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm animate-fade-in">
             Clique para marcar os vértices. Feche o polígono no último ponto.
           </div>
         </div>
       )}
       
       {/* Instruções de pin - quando ativo */}
-      {isPinMode && (
+      {showPinInstructions && (
         <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
-          <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm">
+          <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm animate-fade-in">
             Clique no mapa para colocar um pin no local desejado.
           </div>
         </div>

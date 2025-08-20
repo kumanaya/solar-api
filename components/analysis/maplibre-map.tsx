@@ -945,7 +945,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
 
       {/* Drawing mode instructions */}
       {(drawingMode || isDrawingMode) && (
-        <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border z-20 max-w-sm">
+        <div className="absolute bottom-2 md:bottom-4 left-1/2 transform -translate-x-1/2 bg-background/90 backdrop-blur-sm rounded-lg p-3 shadow-lg border z-20 max-w-sm">
           <div className="text-center">
             <div className="text-sm font-medium text-foreground mb-1">
               Modo de Desenho Ativo
