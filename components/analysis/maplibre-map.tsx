@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useAnalysis } from "./analysis-context";
@@ -85,20 +85,26 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   // Expose functions to parent via ref
   useImperativeHandle(ref, () => ({
     undoLastPoint: () => {
+      // Clear any finished polygon when editing
+      clearFinishedPolygonVisualization();
+      
       setDrawingCoordinates(prev => {
         if (prev.length > 0) {
           const newCoords = prev.slice(0, -1);
           updateDrawingVisualization(newCoords);
-          onDrawingCoordinatesChange?.(newCoords);
+          setTimeout(() => onDrawingCoordinatesChange?.(newCoords), 0);
           return newCoords;
         }
         return prev;
       });
     },
     clearDrawing: () => {
-      setDrawingCoordinates([]);
+      // Clear both drawing visualization and finished polygon
       clearDrawingVisualization();
-      onDrawingCoordinatesChange?.([]);
+      clearFinishedPolygonVisualization();
+      
+      setDrawingCoordinates([]);
+      setTimeout(() => onDrawingCoordinatesChange?.([]), 0);
     },
     reopenPolygon: () => {
       // Check if there's a finished polygon to reopen
@@ -115,7 +121,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
           setDrawingCoordinates(coords);
           setTimeout(() => {
             updateDrawingVisualization(coords);
-            onDrawingCoordinatesChange?.(coords);
+            setTimeout(() => onDrawingCoordinatesChange?.(coords), 0);
           }, 50);
           
           // Clear polygon data to allow editing
@@ -130,7 +136,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       }
     },
     getDrawingCoordinates: () => drawingCoordinates
-  }), [drawingCoordinates, onDrawingCoordinatesChange, data.footprints, data.areaSource, updateData, setCurrentPolygon, setHasFootprintFromAction]);
+  }), [drawingCoordinates, onDrawingCoordinatesChange]);
 
   // Initialize map
   useEffect(() => {
@@ -314,7 +320,18 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
           const area = feature.properties?.area;
           new maplibregl.Popup()
             .setLngLat(e.lngLat)
-            .setHTML(`<div class="p-2"><strong>Área:</strong> ${area}m²</div>`)
+            .setHTML(`
+              <div style="
+                background: hsl(var(--background));
+                color: hsl(var(--foreground));
+                border: 1px solid hsl(var(--border));
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-size: 13px;
+              ">
+                <span style="font-weight: 500; color: hsl(var(--foreground));">Área:</span> ${area}m²
+              </div>
+            `)
             .addTo(map.current!);
         }
       });
@@ -427,6 +444,35 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     const handleDrawingClick = (e: maplibregl.MapMouseEvent) => {
       if (!drawingMode && !isDrawingMode) return;
 
+      // Check if click was on a layer (footprints or drawn polygon)
+      let features: maplibregl.MapboxGeoJSONFeature[] = [];
+      
+      try {
+        // Check which layers exist and query only those
+        const existingLayers = [];
+        if (map.current!.getLayer('footprints-fill')) {
+          existingLayers.push('footprints-fill');
+        }
+        if (map.current!.getLayer('drawn-polygon-fill')) {
+          existingLayers.push('drawn-polygon-fill');
+        }
+        
+        if (existingLayers.length > 0) {
+          features = map.current!.queryRenderedFeatures(e.point, {
+            layers: existingLayers
+          });
+        }
+      } catch (error) {
+        console.log('Error querying features:', error);
+        features = [];
+      }
+
+      // If clicked on a layer, don't add a drawing point (let layer handlers show popup)
+      if (features.length > 0) {
+        console.log('Clicked on layer, not adding drawing point');
+        return;
+      }
+
       const { lng, lat } = e.lngLat;
       const newCoord: [number, number] = [lng, lat];
 
@@ -450,8 +496,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         // Update drawing visualization
         updateDrawingVisualization(newCoords);
         
-        // Notify parent component
-        onDrawingCoordinatesChange?.(newCoords);
+        // Notify parent component after render
+        setTimeout(() => onDrawingCoordinatesChange?.(newCoords), 0);
         
         return newCoords;
       });
@@ -546,7 +592,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
           // Small delay to ensure map layers are cleared before updating
           setTimeout(() => {
             updateDrawingVisualization(coords);
-            onDrawingCoordinatesChange?.(coords);
+            setTimeout(() => onDrawingCoordinatesChange?.(coords), 0);
           }, 50);
           
           // Clear polygon data to allow editing
@@ -579,7 +625,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawingMode, isDrawingMode, isMapLoaded, drawingCoordinates, updateData, setCurrentPolygon]);
+  }, [drawingMode, isDrawingMode, isMapLoaded]);
 
   // Helper function to calculate distance between two points in degrees
   const calculateDistance = (point1: [number, number], point2: [number, number]): number => {
@@ -788,10 +834,26 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         new maplibregl.Popup()
           .setLngLat(e.lngLat)
           .setHTML(`
-            <div class="p-3">
-              <div class="font-semibold text-sm mb-1">Área Desenhada</div>
-              <div class="text-sm"><strong>Área:</strong> ${area}m²</div>
-              <div class="text-sm"><strong>Fonte:</strong> Desenho manual</div>
+            <div style="
+              background: hsl(var(--background));
+              color: hsl(var(--foreground));
+              border: 1px solid hsl(var(--border));
+              border-radius: 8px;
+              padding: 12px;
+              box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+              min-width: 200px;
+            ">
+              <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px; color: hsl(var(--foreground));">
+                Área Desenhada
+              </div>
+              <div style="font-size: 13px; color: hsl(var(--muted-foreground));">
+                <div style="margin-bottom: 4px;">
+                  <span style="font-weight: 500; color: hsl(var(--foreground));">Área:</span> ${area}m²
+                </div>
+                <div>
+                  <span style="font-weight: 500; color: hsl(var(--foreground));">Fonte:</span> Desenho manual
+                </div>
+              </div>
             </div>
           `)
           .addTo(map.current!);
@@ -967,6 +1029,33 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         .maplibregl-ctrl-logo,
         .maplibregl-ctrl-attrib {
           display: none !important;
+        }
+        
+        /* Customize MapLibre popup to follow theme */
+        .maplibregl-popup-content {
+          background: hsl(var(--background)) !important;
+          color: hsl(var(--foreground)) !important;
+          border: 1px solid hsl(var(--border)) !important;
+          border-radius: 8px !important;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+          padding: 0 !important;
+        }
+        
+        .maplibregl-popup-tip {
+          border-top-color: hsl(var(--background)) !important;
+        }
+        
+        .maplibregl-popup-close-button {
+          color: hsl(var(--muted-foreground)) !important;
+          font-size: 16px !important;
+          right: 8px !important;
+          top: 8px !important;
+        }
+        
+        .maplibregl-popup-close-button:hover {
+          color: hsl(var(--foreground)) !important;
+          background: hsl(var(--muted)) !important;
+          border-radius: 4px !important;
         }
       `}</style>
     </div>
