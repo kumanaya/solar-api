@@ -17,11 +17,11 @@ export interface AnalysisData {
   coordinates: [number, number] | null;
   coverage: {
     google: boolean;
-    fallback: string;
+    fallback?: string;
   };
   confidence: ConfidenceLevel;
   usableArea: number;
-  areaSource: "footprint" | "manual";
+  areaSource: "footprint" | "manual" | "google" | "estimate";
   annualIrradiation: number;
   irradiationSource: string;
   shadingIndex: number;
@@ -42,6 +42,8 @@ interface AnalysisContextType {
   setError: (error: string | null) => void;
   hasCredits: boolean;
   setHasCredits: (credits: boolean) => void;
+  selectedAddress: string;
+  setSelectedAddress: (address: string) => void;
 }
 
 const defaultData: AnalysisData = {
@@ -72,6 +74,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasCredits, setHasCredits] = useState(true);
+  const [selectedAddress, setSelectedAddress] = useState("");
 
   const updateData = (updates: Partial<AnalysisData>) => {
     setData(prev => ({ ...prev, ...updates }));
@@ -86,7 +89,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       error,
       setError,
       hasCredits,
-      setHasCredits
+      setHasCredits,
+      selectedAddress,
+      setSelectedAddress
     }}>
       {children}
     </AnalysisContext.Provider>

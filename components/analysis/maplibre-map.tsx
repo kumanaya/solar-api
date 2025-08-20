@@ -11,6 +11,7 @@ interface MapLibreMapProps {
   showShadow?: boolean; // Optional since handled by parent
   showRelief?: boolean; // Optional since handled by parent
   isDrawingMode: boolean;
+  isPinMode?: boolean;
 }
 
 // Move function outside component to avoid re-creation
@@ -60,13 +61,15 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
   }
 };
 
-export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
+export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibreMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const { data } = useAnalysis();
+  const { data, selectedAddress, updateData, setSelectedAddress } = useAnalysis();
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<string>(layer);
   const [showAttribution, setShowAttribution] = useState(false);
+  const markerRef = useRef<maplibregl.Marker | null>(null);
+  const pinMarkerRef = useRef<maplibregl.Marker | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -117,48 +120,35 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
     
   }, [layer, isMapLoaded, currentLayer]);
 
-  // Handle coordinates marker
+  // Navigate to coordinates (removed duplicate geocoding)
   useEffect(() => {
     if (!map.current || !isMapLoaded || !data.coordinates) return;
-
-    // Ensure coordinates is a string before splitting
-    const coordsStr = typeof data.coordinates === 'string' ? data.coordinates : String(data.coordinates);
-    const coords = coordsStr.split(',');
-    if (coords.length !== 2) return;
     
-    const [lng, lat] = coords.map(Number);
+    const [lng, lat] = data.coordinates;
     if (isNaN(lng) || isNaN(lat)) return;
     
-    // Remove existing marker
-    const existingMarker = document.querySelector('.analysis-marker');
-    if (existingMarker) {
-      existingMarker.remove();
-    }
-
-    // Add new marker
-    const markerElement = document.createElement('div');
-    markerElement.className = 'analysis-marker';
-    markerElement.style.cssText = `
-      width: 12px;
-      height: 12px;
-      background-color: #ef4444;
-      border: 2px solid #ffffff;
-      border-radius: 50%;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-      animation: pulse 2s infinite;
-    `;
-
-    new maplibregl.Marker(markerElement)
-      .setLngLat([lng, lat])
-      .addTo(map.current);
-
-    // Center map on coordinates
+    // Fly to the location
     map.current.flyTo({
       center: [lng, lat],
       zoom: 18,
-      duration: 1000
+      duration: 2000
     });
+    
+    // Remove existing marker
+    if (markerRef.current) {
+      markerRef.current.remove();
+    }
+    
+    // Add new marker
+    markerRef.current = new maplibregl.Marker({
+      color: '#3b82f6'
+    })
+      .setLngLat([lng, lat])
+      .addTo(map.current!);
+      
   }, [data.coordinates, isMapLoaded]);
+
+  // This effect is now handled by the navigation effect above
 
   // Handle footprints
   useEffect(() => {
@@ -282,16 +272,84 @@ export function MapLibreMap({ layer, isDrawingMode }: MapLibreMapProps) {
     }
   }, [data.footprints, isMapLoaded]);
 
-  // Handle drawing mode
+  // Handle drawing and pin modes
   useEffect(() => {
     if (!map.current || !isMapLoaded) return;
 
     if (isDrawingMode) {
       map.current.getCanvas().style.cursor = 'crosshair';
+    } else if (isPinMode) {
+      map.current.getCanvas().style.cursor = 'copy';
     } else {
       map.current.getCanvas().style.cursor = '';
     }
-  }, [isDrawingMode, isMapLoaded]);
+  }, [isDrawingMode, isPinMode, isMapLoaded]);
+
+  // Handle pin placement
+  useEffect(() => {
+    if (!map.current || !isMapLoaded) return;
+
+    const handleMapClick = async (e: maplibregl.MapMouseEvent) => {
+      if (!isPinMode) return;
+
+      const { lng, lat } = e.lngLat;
+      
+      // Remove existing pin marker
+      if (pinMarkerRef.current) {
+        pinMarkerRef.current.remove();
+      }
+      
+      // Add new pin marker
+      pinMarkerRef.current = new maplibregl.Marker({
+        color: '#ef4444'
+      })
+        .setLngLat([lng, lat])
+        .addTo(map.current!);
+      
+      // Reverse geocode to get address
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'SolarAnalysis/1.0'
+            }
+          }
+        );
+        
+        if (response.ok) {
+          const result = await response.json();
+          const address = result.display_name || `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+          
+          // Update analysis context
+          setSelectedAddress(address);
+          updateData({
+            address: address,
+            coordinates: [lng, lat] as [number, number]
+          });
+        }
+      } catch (error) {
+        console.error('Reverse geocoding error:', error);
+        // Fallback to coordinates
+        const address = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        setSelectedAddress(address);
+        updateData({
+          address: address,
+          coordinates: [lng, lat] as [number, number]
+        });
+      }
+    };
+
+    if (isPinMode) {
+      map.current.on('click', handleMapClick);
+    }
+
+    return () => {
+      if (map.current) {
+        map.current.off('click', handleMapClick);
+      }
+    };
+  }, [isPinMode, isMapLoaded, updateData, setSelectedAddress]);
 
   return (
     <div className="h-full w-full relative">

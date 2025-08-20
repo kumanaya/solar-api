@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, MapPin, Loader2 } from "lucide-react";
+import { Search, MapPin, Loader2, Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useAnalysis, ConfidenceLevel, Verdict } from "./analysis-context";
+import { useAnalysis } from "./analysis-context";
+import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
 
 interface AddressSuggestion {
   display_name: string;
@@ -17,24 +18,34 @@ export function AddressSearch() {
   const [searchQuery, setSearchQuery] = useState("");
   const [suggestions, setSuggestions] = useState<AddressSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { updateData, setIsLoading, setError } = useAnalysis();
+  const { updateData, setIsLoading, setError, setSelectedAddress } = useAnalysis();
 
   // Função para buscar sugestões de endereços
   const fetchSuggestions = async (query: string) => {
-    if (query.length < 3) {
+    if (query.length < 2) {
       setSuggestions([]);
       return;
     }
 
     setIsLoadingSuggestions(true);
     try {
+      // Detectar se contém número no início (ex: "123 rua", "456 av")
+      const hasNumberAtStart = /^\d+\s/.test(query.trim());
+      // Detectar se é apenas número (número da casa)
+      const isJustNumber = /^\d+$/.test(query.trim());
+      
+      let searchQuery = query;
+      if (isJustNumber) {
+        // Se for apenas número, adicionar contexto brasileiro para melhorar resultados
+        searchQuery = `${query}, Brasil`;
+      }
+      
       // Usar Nominatim (OpenStreetMap) para geocoding gratuito
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=br&q=${encodeURIComponent(query)}`,
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=10&countrycodes=br&q=${encodeURIComponent(searchQuery)}`,
         {
           headers: {
             'User-Agent': 'SolarAnalysis/1.0'
@@ -44,7 +55,42 @@ export function AddressSearch() {
       
       if (response.ok) {
         const data: AddressSuggestion[] = await response.json();
-        setSuggestions(data);
+        
+        let finalSuggestions = data;
+        
+        // Se digitou número + rua (ex: "123 rua"), priorizar endereços que começam com esse número
+        if (hasNumberAtStart) {
+          const numberMatch = query.match(/^(\d+)\s/);
+          if (numberMatch) {
+            const number = numberMatch[1];
+            const prioritized = data.filter(item => {
+              const displayName = item.display_name.toLowerCase();
+              return displayName.startsWith(number + ' ') || displayName.includes(`, ${number} `);
+            });
+            const others = data.filter(item => {
+              const displayName = item.display_name.toLowerCase();
+              return !(displayName.startsWith(number + ' ') || displayName.includes(`, ${number} `));
+            });
+            finalSuggestions = [...prioritized, ...others];
+          }
+        }
+        // Se for busca por número apenas, filtrar endereços que contenham esse número
+        else if (isJustNumber) {
+          const withNumber = data.filter(item => {
+            const displayName = item.display_name.toLowerCase();
+            // Verifica se o número aparece no início do endereço ou após vírgula/espaço
+            const numberPattern = new RegExp(`(^|[,\\s])${query}(\\s|,|$)`, 'i');
+            return numberPattern.test(displayName);
+          });
+          const withoutNumber = data.filter(item => {
+            const displayName = item.display_name.toLowerCase();
+            const numberPattern = new RegExp(`(^|[,\\s])${query}(\\s|,|$)`, 'i');
+            return !numberPattern.test(displayName);
+          });
+          finalSuggestions = [...withNumber, ...withoutNumber.slice(0, 3)];
+        }
+        
+        setSuggestions(finalSuggestions.slice(0, 8));
       }
     } catch (error) {
       console.error('Erro ao buscar sugestões:', error);
@@ -74,75 +120,86 @@ export function AddressSearch() {
     };
   }, [searchQuery]);
 
-  const handleSuggestionClick = (suggestion: AddressSuggestion) => {
+  const handleSuggestionClick = async (suggestion: AddressSuggestion) => {
     setSearchQuery(suggestion.display_name);
+    setSelectedAddress(suggestion.display_name);
     setShowSuggestions(false);
     setSuggestions([]);
-    // Automaticamente iniciar a análise
-    performAnalysis(suggestion.display_name, suggestion.lat, suggestion.lon);
+    
+    // Update coordinates in analysis context
+    const lat = parseFloat(suggestion.lat);
+    const lng = parseFloat(suggestion.lon);
+    updateData({
+      address: suggestion.display_name,
+      coordinates: [lng, lat] as [number, number]
+    });
   };
 
-  const performAnalysis = async (address: string, lat?: string, lon?: string) => {
-    setIsSearching(true);
+
+  const handleAddressConfirm = async () => {
+    if (!searchQuery.trim()) return;
+    
     setIsLoading(true);
     setError(null);
-    setShowSuggestions(false);
-
+    
     try {
-      // Simular busca de endereço e análise
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      // Usar coordenadas da sugestão se disponíveis
-      const coordinates = lat && lon 
-        ? [parseFloat(lon), parseFloat(lat)] as [number, number]
-        : [-23.550520, -46.633308] as [number, number];
-
-      // Mock de dados de análise
-      const mockData = {
-        address,
-        coordinates: `${coordinates[0]},${coordinates[1]}`,
-        coverage: {
-          google: Math.random() > 0.3,
-          fallback: "Usando dados NASA SRTM"
-        },
-        confidence: (Math.random() > 0.5 ? "Alta" : Math.random() > 0.3 ? "Média" : "Baixa") as ConfidenceLevel,
-        usableArea: Math.floor(Math.random() * 200) + 50,
-        areaSource: "footprint" as const,
-        annualIrradiation: Math.floor(Math.random() * 500) + 1400,
-        irradiationSource: "PVGIS",
-        shadingIndex: Math.random() * 0.3,
-        shadingLoss: Math.floor(Math.random() * 15),
-        estimatedProduction: Math.floor(Math.random() * 5000) + 2000,
-        verdict: (Math.random() > 0.3 ? "Apto" : Math.random() > 0.5 ? "Parcial" : "Não apto") as Verdict,
-        reasons: ["Boa irradiação solar", "Área suficiente", "Baixo sombreamento"],
-        footprints: [
-          {
-            id: "1",
-            coordinates: [
-              [coordinates[0], coordinates[1]],
-              [coordinates[0] + 0.001, coordinates[1]],
-              [coordinates[0] + 0.001, coordinates[1] + 0.001],
-              [coordinates[0], coordinates[1] + 0.001]
-            ] as [number, number][],
-            area: Math.floor(Math.random() * 100) + 80,
-            isActive: true
+      // Detectar se é apenas número
+      const isJustNumber = /^\d+$/.test(searchQuery.trim());
+      let finalSearchQuery = searchQuery;
+      
+      if (isJustNumber) {
+        finalSearchQuery = `${searchQuery}, Brasil`;
+      }
+      
+      // Geocode the address
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=br&q=${encodeURIComponent(finalSearchQuery)}`,
+        {
+          headers: {
+            'User-Agent': 'SolarAnalysis/1.0'
           }
-        ],
-        usageFactor: 0.75
-      };
-
-      updateData(mockData);
-    } catch {
-      setError("Erro ao buscar endereço. Tente novamente.");
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.length > 0) {
+          let result = data[0];
+          
+          // Se for busca por número, tentar encontrar o melhor resultado
+          if (isJustNumber && data.length > 1) {
+            const filtered = data.filter(item => {
+              const displayName = item.display_name.toLowerCase();
+              const numberPattern = new RegExp(`(^|[,\\s])${searchQuery}(\\s|,|$)`, 'i');
+              return numberPattern.test(displayName);
+            });
+            if (filtered.length > 0) {
+              result = filtered[0];
+            }
+          }
+          
+          const lat = parseFloat(result.lat);
+          const lng = parseFloat(result.lon);
+          
+          setSelectedAddress(result.display_name);
+          updateData({
+            address: result.display_name,
+            coordinates: [lng, lat] as [number, number]
+          });
+        } else {
+          setError('Endereço não encontrado');
+        }
+      } else {
+        setError('Erro ao buscar endereço');
+      }
+    } catch (error) {
+      console.error('Geocoding error:', error);
+      setError('Erro ao buscar endereço');
     } finally {
-      setIsSearching(false);
       setIsLoading(false);
     }
-  };
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    performAnalysis(searchQuery);
+    
+    setShowSuggestions(false);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,7 +222,7 @@ export function AddressSearch() {
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") {
-      handleSearch();
+      handleAddressConfirm();
     }
     if (e.key === "Escape") {
       setShowSuggestions(false);
@@ -179,13 +236,12 @@ export function AddressSearch() {
           <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground z-10" />
           <Input
             ref={inputRef}
-            placeholder="Digite o endereço para análise..."
+            placeholder="Ex: 123 Rua das Flores, São Paulo..."
             value={searchQuery}
             onChange={handleInputChange}
             onFocus={handleInputFocus}
             onBlur={handleInputBlur}
             onKeyPress={handleKeyPress}
-            disabled={isSearching}
             className="pl-10"
           />
           
@@ -219,15 +275,12 @@ export function AddressSearch() {
           )}
         </div>
         <Button 
-          onClick={handleSearch}
-          disabled={isSearching || !searchQuery.trim()}
+          onClick={handleAddressConfirm}
+          disabled={!searchQuery.trim()}
           size="default"
+          variant="outline"
         >
-          {isSearching ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="h-4 w-4" />
-          )}
+          <Search className="h-4 w-4" />
         </Button>
       </div>
     </div>

@@ -7,9 +7,10 @@ interface MapViewProps {
   showShadow: boolean;
   showRelief: boolean;
   isDrawingMode: boolean;
+  isPinMode?: boolean;
 }
 
-export function MapView({ layer, showShadow, showRelief, isDrawingMode }: MapViewProps) {
+export function MapView({ layer, showShadow, showRelief, isDrawingMode, isPinMode = false }: MapViewProps) {
   return (
     <div className="h-full w-full relative">
       <MapLibreMap 
@@ -17,6 +18,7 @@ export function MapView({ layer, showShadow, showRelief, isDrawingMode }: MapVie
         showShadow={showShadow}
         showRelief={showRelief}
         isDrawingMode={isDrawingMode}
+        isPinMode={isPinMode}
       />
       
       {/* Overlay de sombra (NDVI) - rendered on top of map */}
