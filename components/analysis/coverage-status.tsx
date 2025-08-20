@@ -5,7 +5,10 @@ import { Info, Shield, ShieldCheck, ShieldAlert } from "lucide-react";
 import { useAnalysis } from "./analysis-context";
 
 export function CoverageStatus() {
-  const { data } = useAnalysis();
+  const { data, hasAnalysisResults } = useAnalysis();
+  
+  // Só renderizar se tivermos resultados de análise
+  if (!hasAnalysisResults) return null;
 
   const getConfidenceIcon = () => {
     switch (data.confidence) {

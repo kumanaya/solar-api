@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
 
 export function ResultsPanel() {
-  const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading } = useAnalysis();
+  const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading, setHasAnalysisResults } = useAnalysis();
 
   const performAnalysis = async () => {
     if (!selectedAddress) return;
@@ -47,6 +47,9 @@ export function ResultsPanel() {
         ...frontendData,
         coordinates: currentCoordinates // Keep user's pin location
       });
+      
+      // Mark that we have analysis results
+      setHasAnalysisResults(true);
       
     } catch (error) {
       console.error('Analysis error:', error);
@@ -152,15 +155,16 @@ export function ResultsPanel() {
         )}
 
         {/* Resultados técnicos */}
-        {data.coordinates ? (
-          <TechnicalResults />
-        ) : !selectedAddress ? (
+        <TechnicalResults />
+        
+        {/* Mensagem quando não há endereço selecionado */}
+        {!selectedAddress && (
           <div className="bg-muted/50 border border-border rounded-lg p-4 text-center">
             <p className="text-sm text-muted-foreground">
               Digite um endereço acima para iniciar a análise
             </p>
           </div>
-        ) : null}
+        )}
 
         {/* Callout para desenhar telhado */}
         {data.coordinates && data.footprints.length === 0 && (

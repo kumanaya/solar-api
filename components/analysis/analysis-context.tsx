@@ -48,6 +48,8 @@ interface AnalysisContextType {
   setDrawingMode: (drawing: boolean) => void;
   currentPolygon: { type: "Polygon"; coordinates: number[][][] } | null;
   setCurrentPolygon: (polygon: { type: "Polygon"; coordinates: number[][][] } | null) => void;
+  hasAnalysisResults: boolean;
+  setHasAnalysisResults: (hasResults: boolean) => void;
 }
 
 const defaultData: AnalysisData = {
@@ -81,6 +83,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [selectedAddress, setSelectedAddress] = useState("");
   const [drawingMode, setDrawingMode] = useState(false);
   const [currentPolygon, setCurrentPolygon] = useState<{ type: "Polygon"; coordinates: number[][][] } | null>(null);
+  const [hasAnalysisResults, setHasAnalysisResults] = useState(false);
 
   const updateData = (updates: Partial<AnalysisData>) => {
     setData(prev => ({ ...prev, ...updates }));
@@ -101,7 +104,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       drawingMode,
       setDrawingMode,
       currentPolygon,
-      setCurrentPolygon
+      setCurrentPolygon,
+      hasAnalysisResults,
+      setHasAnalysisResults
     }}>
       {children}
     </AnalysisContext.Provider>
