@@ -7,9 +7,12 @@ import { useAnalysis } from "./analysis-context";
 import { AlertCircle, Zap, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
+import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 
 export function ResultsPanel() {
   const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading, setHasAnalysisResults } = useAnalysis();
+  
+  const { isFootprintError } = useErrorHandler();
 
   const performAnalysis = async () => {
     if (!selectedAddress) return;
@@ -99,19 +102,28 @@ export function ResultsPanel() {
         {/* Banner de erro */}
         {error && (
           <div className={`border rounded-lg p-3 ${
-            error.includes('autenticado') || error.includes('login')
+            isFootprintError() 
+              ? 'bg-amber-50 border-amber-200'
+              : error.includes('autenticado') || error.includes('login')
               ? 'bg-destructive/10 border-destructive/20'
               : 'bg-muted/50 border-border'
           }`}>
             <div className="flex items-start space-x-2">
               <AlertCircle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
-                error.includes('autenticado') || error.includes('login')
+                isFootprintError()
+                  ? 'text-amber-600'
+                  : error.includes('autenticado') || error.includes('login')
                   ? 'text-destructive'
                   : 'text-orange-500'
               }`} />
               <div>
                 <p className="text-sm text-foreground">{error}</p>
-                {!error.includes('autenticado') && !error.includes('login') && (
+                {isFootprintError() && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    💡 Use a ferramenta "Desenhar Telhado" no mapa
+                  </p>
+                )}
+                {!error.includes('autenticado') && !error.includes('login') && !isFootprintError() && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Tentando fonte alternativa...
                   </p>
@@ -166,17 +178,6 @@ export function ResultsPanel() {
           </div>
         )}
 
-        {/* Callout para desenhar telhado */}
-        {data.coordinates && data.footprints.length === 0 && (
-          <div className="bg-muted/50 border border-border rounded-lg p-4 text-center">
-            <p className="text-sm text-muted-foreground mb-2">
-              Nenhum telhado detectado automaticamente
-            </p>
-            <button className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-              Desenhar telhado manualmente
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Ações */}

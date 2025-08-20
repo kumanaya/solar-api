@@ -124,12 +124,17 @@ async function getMicrosoftFootprint(lat: number, lng: number) {
     
     console.log(`Searching Microsoft footprints for: ${lat}, ${lng}`);
     
-    // Use the database function to find the closest building
-    const { data, error } = await supabase.rpc('find_closest_building', {
-      target_lat: lat,
-      target_lng: lng,
-      max_distance_meters: 100 // Search within 100 meters
-    });
+    // Use the database function to find the closest building with timeout
+    const { data, error } = await Promise.race([
+      supabase.rpc('find_closest_building', {
+        target_lat: lat,
+        target_lng: lng,
+        max_distance_meters: 50 // Reduced distance for faster query
+      }),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Query timeout')), 3000)
+      )
+    ]) as any;
 
     if (error) {
       console.error('Microsoft footprint query error:', error);
@@ -177,105 +182,14 @@ async function getMicrosoftFootprint(lat: number, lng: number) {
     
   } catch (error) {
     console.error('Microsoft footprint fetch error:', error);
+    // Se for timeout ou erro de query, continuar para OSM
     return null;
   }
 }
 
-// Overpass API (OpenStreetMap) - buscar buildings próximos
-async function getOSMBuilding(lat: number, lng: number) {
-  try {
-    // Query Overpass para buscar buildings em raio de 50m
-    const query = `
-      [out:json][timeout:10];
-      (
-        way["building"](around:50,${lat},${lng});
-        relation["building"](around:50,${lat},${lng});
-      );
-      out geom;
-    `;
-    
-    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-    const res = await fetchWithTimeout(url, 10000);
-    
-    if (!res.ok) return null;
-    
-    const data = await res.json();
-    
-    if (!data.elements || data.elements.length === 0) return null;
-    
-    // Pegar o primeiro building encontrado
-    const building = data.elements[0];
-    
-    if (!building.geometry || building.geometry.length < 3) return null;
-    
-    // Converter para formato GeoJSON
-    const coordinates = building.geometry.map((node: any) => [node.lon, node.lat]);
-    
-    // Fechar o polígono se necessário
-    if (coordinates[0][0] !== coordinates[coordinates.length - 1][0] || 
-        coordinates[0][1] !== coordinates[coordinates.length - 1][1]) {
-      coordinates.push(coordinates[0]);
-    }
-    
-    const area = polygonAreaM2(coordinates);
-    const azimuth = calculatePolygonAzimuth(coordinates);
-    
-    // Estimar inclinação baseada no tipo de building (heurística)
-    const buildingType = building.tags?.building || "yes";
-    let tilt = 15; // padrão
-    
-    if (buildingType === "house" || buildingType === "residential") {
-      tilt = 20; // casas geralmente têm telhado mais inclinado
-    } else if (buildingType === "commercial" || buildingType === "industrial") {
-      tilt = 5; // comerciais geralmente mais planos
-    }
-    
-    return {
-      polygon: {
-        type: "Polygon" as const,
-        coordinates: [coordinates]
-      },
-      area,
-      confidence: "Média" as const,
-      source: "OpenStreetMap",
-      azimuth,
-      tilt
-    };
-    
-  } catch (error) {
-    console.error("OSM building fetch error:", error);
-    return null;
-  }
-}
+// OSM fallback removido - apenas Microsoft Footprints são aceitos
 
-// Fallback: criar polígono estimado baseado em heurísticas locais
-function createEstimatedFootprint(lat: number, lng: number) {
-  // Criar um retângulo de 10x8m orientado Norte-Sul (típico residencial brasileiro)
-  const width = 0.00008; // ~10m em graus
-  const height = 0.00006; // ~8m em graus
-  
-  const coords: [number, number][] = [
-    [lng - width/2, lat - height/2],
-    [lng + width/2, lat - height/2],
-    [lng + width/2, lat + height/2],
-    [lng - width/2, lat + height/2],
-    [lng - width/2, lat - height/2]
-  ];
-  
-  const area = polygonAreaM2(coords);
-  
-  return {
-    polygon: {
-      type: "Polygon" as const,
-      coordinates: [coords]
-    },
-    area,
-    confidence: "Baixa" as const,
-    source: "Estimativa heurística",
-    azimuth: 0, // Norte
-    tilt: 15 // Inclinação padrão brasileira
-  };
-}
+// Estimativa heurística removida - apenas Microsoft Footprints são aceitos
 
 /* ========= AUTH ========= */
 
@@ -341,20 +255,21 @@ Deno.serve(async (req: Request) => {
 
     let footprintData = null;
 
-    // 1) Tentar Microsoft Footprints (placeholder)
+    // Apenas Microsoft Footprints - sem fallbacks
     console.log("Trying Microsoft footprints...");
     footprintData = await getMicrosoftFootprint(input.lat, input.lng).catch(() => null);
 
-    // 2) Fallback: OpenStreetMap
+    // Se não encontrar, retornar erro - obrigar usuário a desenhar
     if (!footprintData) {
-      console.log("Trying OSM buildings...");
-      footprintData = await getOSMBuilding(input.lat, input.lng).catch(() => null);
-    }
-
-    // 3) Último recurso: estimativa heurística
-    if (!footprintData) {
-      console.log("Using estimated footprint...");
-      footprintData = createEstimatedFootprint(input.lat, input.lng);
+      console.log("No Microsoft footprint found - user must draw manually");
+      return new Response(JSON.stringify({
+        success: false,
+        error: "Nenhum footprint encontrado nesta localização. Desenhe o telhado manualmente.",
+        errorCode: "FOOTPRINT_NOT_FOUND"
+      }), {
+        status: 404,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
     }
 
     const response = FootprintResponseSchema.parse({

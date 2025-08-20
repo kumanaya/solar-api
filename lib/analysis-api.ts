@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { ERROR_CODES, createApiError, detectErrorCode } from "@/lib/shared/error-codes";
 
 interface AnalysisRequest {
   address: string;
@@ -41,6 +42,7 @@ interface AnalysisResponse {
     googleSolarData?: object;
   };
   error?: string;
+  errorCode?: string;
 }
 
 export async function analyzeAddress(
@@ -78,18 +80,22 @@ export async function analyzeAddress(
 
     if (error) {
       console.error('Edge function error:', error);
+      const apiError = createApiError(ERROR_CODES.EDGE_FUNCTION_ERROR);
       return {
         success: false,
-        error: `Erro de comunicação: ${error.message || 'Falha na conexão com o serviço'}`
+        error: apiError.userMessage,
+        errorCode: apiError.code
       };
     }
 
     // Handle empty or malformed response
     if (!data) {
       console.error('Empty response from edge function');
+      const apiError = createApiError(ERROR_CODES.EMPTY_RESPONSE);
       return {
         success: false,
-        error: 'Resposta vazia do servidor. Verifique se a edge function está funcionando.'
+        error: apiError.userMessage,
+        errorCode: apiError.code
       };
     }
 
@@ -100,26 +106,34 @@ export async function analyzeAddress(
         const parsedData = JSON.parse(data);
         console.log('Parsed data successfully:', parsedData);
         if (!parsedData.success) {
+          const errorCode = parsedData.errorCode || detectErrorCode(parsedData.error || '');
+          const apiError = createApiError(errorCode, parsedData.error);
           return {
             success: false,
-            error: parsedData.error || 'Erro na análise'
+            error: apiError.userMessage,
+            errorCode: apiError.code
           };
         }
         return parsedData as AnalysisResponse;
       } catch (parseError) {
         console.error('JSON parse error:', parseError);
         console.error('Failed to parse string:', data);
+        const apiError = createApiError(ERROR_CODES.MALFORMED_RESPONSE);
         return {
           success: false,
-          error: 'Erro ao processar resposta do servidor. Resposta malformada.'
+          error: apiError.userMessage,
+          errorCode: apiError.code
         };
       }
     }
 
     if (!data.success) {
+      const errorCode = data.errorCode || detectErrorCode(data.error || '');
+      const apiError = createApiError(errorCode, data.error);
       return {
         success: false,
-        error: data.error || 'Erro desconhecido na análise'
+        error: apiError.userMessage,
+        errorCode: apiError.code
       };
     }
 
@@ -128,26 +142,21 @@ export async function analyzeAddress(
   } catch (error) {
     console.error('Analysis API error:', error);
     
-    // Check if it's a network or function not found error
+    let errorCode = ERROR_CODES.UNKNOWN_ERROR;
+    
     if (error instanceof Error) {
       if (error.message.includes('FunctionsHttpError') || error.message.includes('404')) {
-        return {
-          success: false,
-          error: 'Edge function não encontrada. Verifique se a função /analyze foi deployada no Supabase.'
-        };
-      }
-      
-      if (error.message.includes('network') || error.message.includes('fetch')) {
-        return {
-          success: false,
-          error: 'Erro de conexão. Verifique sua internet e tente novamente.'
-        };
+        errorCode = ERROR_CODES.FUNCTION_NOT_FOUND;
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        errorCode = ERROR_CODES.NETWORK_ERROR;
       }
     }
     
+    const apiError = createApiError(errorCode);
     return {
       success: false,
-      error: `Erro inesperado: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+      error: apiError.userMessage,
+      errorCode: apiError.code
     };
   }
 }

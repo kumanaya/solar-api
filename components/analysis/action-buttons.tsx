@@ -7,6 +7,7 @@ import { useAnalysis } from "./analysis-context";
 import { PDFModal } from "./pdf-modal";
 import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
 import { getFootprints, transformFootprintData } from "@/lib/footprints-api";
+import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 
 export function ActionButtons() {
   const { 
@@ -19,6 +20,13 @@ export function ActionButtons() {
     setHasFootprintFromAction,
     hasFootprintFromAction
   } = useAnalysis();
+  
+  const { handleError, isFootprintError } = useErrorHandler({
+    onDrawManual: () => {
+      // Aqui poderia ativar modo de desenho automaticamente
+      console.log('User should draw manually');
+    }
+  });
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -103,10 +111,12 @@ export function ActionButtons() {
           const locationSource = data.address.includes(',') && data.address.includes('.') ? 'pin' : 'endereço';
           alert(`Footprint encontrado usando ${locationSource}! Área: ${footprintData.area}m² (${footprintData.source})`);
         } else {
-          setError('Nenhum footprint encontrado para esta localização');
+          setError('Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
         }
       } else {
-        setError(result.error || 'Erro ao buscar footprints');
+        // Usar sistema de códigos de erro padronizado
+        const errorInfo = handleError(result.error || 'Erro ao buscar footprints', result.errorCode);
+        setError(errorInfo.userMessage);
       }
     } catch (error) {
       console.error('Footprint search error:', error);
@@ -194,7 +204,9 @@ export function ActionButtons() {
           });
         }
       } else {
-        setError(result.error || 'Erro na análise');
+        // Usar sistema de códigos de erro padronizado
+        const errorInfo = handleError(result.error || 'Erro na análise', result.errorCode);
+        setError(errorInfo.userMessage);
       }
     } catch (error) {
       console.error('Analysis error:', error);
