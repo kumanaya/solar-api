@@ -2,6 +2,11 @@ import { createClient } from "@/lib/supabase/client";
 
 interface AnalysisRequest {
   address: string;
+  polygon?: {
+    type: "Polygon";
+    coordinates: number[][][]; // [lng,lat]
+  };
+  usableAreaOverride?: number; // m²
 }
 
 interface AnalysisResponse {
@@ -38,15 +43,33 @@ interface AnalysisResponse {
   error?: string;
 }
 
-export async function analyzeAddress(address: string): Promise<AnalysisResponse> {
+export async function analyzeAddress(
+  address: string, 
+  polygon?: { type: "Polygon"; coordinates: number[][][] },
+  usableAreaOverride?: number
+): Promise<AnalysisResponse> {
   try {
     const supabase = createClient();
     
     // Call the edge function (Supabase client handles auth automatically)
     console.log('Calling edge function with address:', address);
     
+    const requestBody: AnalysisRequest = { address };
+    
+    // Add polygon if provided
+    if (polygon) {
+      requestBody.polygon = polygon;
+      console.log('Including polygon in analysis request:', polygon);
+    }
+    
+    // Add usable area override if provided
+    if (usableAreaOverride && usableAreaOverride > 0) {
+      requestBody.usableAreaOverride = usableAreaOverride;
+      console.log('Including usable area override in analysis request:', usableAreaOverride);
+    }
+    
     const { data, error } = await supabase.functions.invoke('analyze', {
-      body: { address } as AnalysisRequest
+      body: requestBody
     });
 
     console.log('Edge function response:', { data, error });

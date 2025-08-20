@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, MapPin, Loader2, Zap } from "lucide-react";
+import { Search, MapPin, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAnalysis } from "./analysis-context";
-import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
+import { getFootprints, transformFootprintData } from "@/lib/footprints-api";
 
 interface AddressSuggestion {
   display_name: string;
@@ -21,7 +21,7 @@ export function AddressSearch() {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { updateData, setIsLoading, setError, setSelectedAddress } = useAnalysis();
+  const { updateData, setIsLoading, setError, setSelectedAddress, setCurrentPolygon } = useAnalysis();
 
   // Função para buscar sugestões de endereços
   const fetchSuggestions = async (query: string) => {
@@ -133,6 +133,9 @@ export function AddressSearch() {
       address: suggestion.display_name,
       coordinates: [lng, lat] as [number, number]
     });
+    
+    // Try to get footprint for this location
+    tryGetFootprint(lat, lng);
   };
 
 
@@ -186,6 +189,9 @@ export function AddressSearch() {
             address: result.display_name,
             coordinates: [lng, lat] as [number, number]
           });
+          
+          // Try to get footprint for this location
+          tryGetFootprint(lat, lng);
         } else {
           setError('Endereço não encontrado');
         }
@@ -200,6 +206,46 @@ export function AddressSearch() {
     }
     
     setShowSuggestions(false);
+  };
+  
+  // Try to get building footprint for coordinates
+  const tryGetFootprint = async (lat: number, lng: number) => {
+    try {
+      console.log('Trying to get footprint for:', { lat, lng });
+      const footprintResponse = await getFootprints(lat, lng);
+      
+      if (footprintResponse.success && footprintResponse.data?.polygon) {
+        console.log('Footprint found:', footprintResponse.data);
+        
+        // Transform footprint data to frontend format
+        const footprintData = transformFootprintData(footprintResponse.data);
+        
+        if (footprintData) {
+          // Update footprints in context
+          updateData({
+            footprints: [footprintData],
+            areaSource: 'footprint' as const,
+            usableArea: Math.round(footprintData.area * 0.75), // Apply usage factor
+            confidence: footprintData.confidence
+          });
+          
+          // Set polygon for analysis API
+          setCurrentPolygon({
+            type: "Polygon",
+            coordinates: [footprintData.coordinates.map(coord => [coord[1], coord[0]])]
+          });
+          
+          console.log('Footprint successfully applied to map');
+        }
+      } else {
+        console.log('No footprint found, will need manual drawing:', footprintResponse.error);
+        // No footprint found - user will need to draw manually
+        // We don't automatically enable drawing mode here, let user decide
+      }
+    } catch (error) {
+      console.error('Error getting footprint:', error);
+      // Continue without footprint - user can draw manually if needed
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

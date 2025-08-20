@@ -1,568 +1,526 @@
-// @ts-ignore: Deno global is available in edge runtime
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// deno-lint-ignore-file no-explicit-any
+// Edge Function – Análise Solar (Deno/Vercel/Supabase Functions)
+// - Google Solar API (se disponível no ponto)
+// - Fallback: PVGIS (E_y) → NASA POWER (GHI)
+// - Cálculo determinístico, sem aleatoriedade
+// - Auth via Supabase JWT (NÃO aceita ANON como Bearer)
+
+/// <reference lib="dom" />
+
+// @ts-ignore Deno types no edge
 declare const Deno: {
-  env: {
-    get(key: string): string | undefined;
-  };
-  serve(handler: (request: Request) => Response | Promise<Response>): void;
+  env: { get(k: string): string | undefined };
+  serve(h: (r: Request) => Response | Promise<Response>): void;
 };
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.5";
+import { z } from "https://esm.sh/zod@3.23.8";
 
-// Environment variables
-const GOOGLE_MAPS_API_KEY = Deno.env.get('GOOGLE_MAPS_API_KEY');
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || '';
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || '';
-const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+/* ========= ENV ========= */
+const GOOGLE_MAPS_API_KEY = Deno.env.get("GOOGLE_MAPS_API_KEY") ?? "";
+const GOOGLE_SOLAR_API_KEY = GOOGLE_MAPS_API_KEY; // mesmo key se habilitado
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-interface AnalyzeRequest {
-  address: string;
-}
+/* ========= SCHEMAS ========= */
+const AnalyzeRequestSchema = z.object({
+  address: z.string().min(5),
+  // opcionais para melhorar fallback:
+  usableAreaOverride: z.number().positive().optional(), // m²
+  polygon: z
+    .object({
+      type: z.literal("Polygon"),
+      coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))), // [lng,lat]
+    })
+    .optional(),
+});
 
-interface GeocodeResponse {
-  results: Array<{
-    geometry: {
-      location: {
-        lat: number;
-        lng: number;
-      };
-    };
-    formatted_address: string;
-  }>;
-  status: string;
-}
+const AnalysisSchema = z.object({
+  address: z.string(),
+  coordinates: z.object({ lat: z.number(), lng: z.number() }),
+  coverage: z.object({
+    google: z.boolean(),
+    fallback: z.string().optional(),
+  }),
+  confidence: z.enum(["Alta", "Média", "Baixa"]),
+  usableArea: z.number(), // m² (já com fator de uso aplicado)
+  areaSource: z.enum(["google", "footprint", "manual", "estimate"]),
+  annualIrradiation: z.number(), // kWh/m²/ano
+  irradiationSource: z.string(),
+  shadingIndex: z.number(), // 0..1
+  shadingLoss: z.number(), // 0..100 (%)
+  estimatedProduction: z.number(), // kWh/ano
+  verdict: z.enum(["Apto", "Parcial", "Não apto"]),
+  reasons: z.array(z.string()),
+  usageFactor: z.number(), // 0..1
+  googleSolarData: z.any().optional(),
+});
 
-interface SolarApiResponse {
-  name?: string;
-  center?: {
-    latitude: number;
-    longitude: number;
-  };
-  imageryDate?: {
-    year: number;
-    month: number;
-    day: number;
-  };
-  regionCode?: string;
+/* ========= TIPOS GOOGLE SOLAR ========= */
+type SolarApiResponse = {
   solarPotential?: {
-    maxArrayPanelsCount: number;
-    maxArrayAreaMeters2: number;
-    maxSunshineHoursPerYear: number;
-    carbonOffsetFactorKgPerMwh: number;
-    wholeRoofStats: {
-      areaMeters2: number;
-      sunshineQuantiles: number[];
-      groundAreaMeters2: number;
+    maxArrayPanelsCount?: number;
+    maxArrayAreaMeters2?: number;
+    maxSunshineHoursPerYear?: number;
+    panelCapacityWatts?: number;
+    solarPanelConfigs?: Array<{
+      panelsCount?: number;
+      yearlyEnergyDcKwh?: number;
+      roofSegmentSummaries?: Array<{
+        pitchDegrees?: number;
+        azimuthDegrees?: number;
+        panelsCount?: number;
+        yearlyEnergyDcKwh?: number;
+        segmentIndex?: number;
+      }>;
+    }>;
+    wholeRoofStats?: {
+      areaMeters2?: number;
+      sunshineQuantiles?: number[];
+      groundAreaMeters2?: number;
     };
-    roofSegmentStats: Array<{
-      pitchDegrees: number;
-      azimuthDegrees: number;
-      stats: {
-        areaMeters2: number;
-        sunshineQuantiles: number[];
-        groundAreaMeters2: number;
+    roofSegmentStats?: Array<{
+      pitchDegrees?: number;
+      azimuthDegrees?: number;
+      stats?: {
+        areaMeters2?: number;
+        sunshineQuantiles?: number[];
+        groundAreaMeters2?: number;
       };
-      center: {
-        latitude: number;
-        longitude: number;
-      };
-      boundingBox: {
+      center?: { latitude: number; longitude: number };
+      boundingBox?: {
         sw: { latitude: number; longitude: number };
         ne: { latitude: number; longitude: number };
       };
-      planeHeightAtCenterMeters: number;
-    }>;
-    solarPanelConfigs: Array<{
-      panelsCount: number;
-      yearlyEnergyDcKwh: number;
-      roofSegmentSummaries: Array<{
-        pitchDegrees: number;
-        azimuthDegrees: number;
-        panelsCount: number;
-        yearlyEnergyDcKwh: number;
-        segmentIndex: number;
-      }>;
-    }>;
-    panelCapacityWatts: number;
-    panelHeightMeters: number;
-    panelWidthMeters: number;
-    panelLifetimeYears: number;
-    buildingStats: {
-      areaMeters2: number;
-      sunshineQuantiles: number[];
-      groundAreaMeters2: number;
-    };
-    solarPanels: Array<{
-      center: {
-        latitude: number;
-        longitude: number;
-      };
-      orientation: string;
-      yearlyEnergyDcKwh: number;
-      segmentIndex: number;
     }>;
   };
-  boundingBox?: {
-    sw: { latitude: number; longitude: number };
-    ne: { latitude: number; longitude: number };
-  };
-  imageryQuality?: string;
-  imageryProcessedDate?: {
-    year: number;
-    month: number;
-    day: number;
-  };
-  error?: {
-    code: number;
-    message: string;
-    status: string;
+  error?: { code: number; message: string; status: string };
+};
+
+/* ========= HELPERS ========= */
+
+// CORS (ajuste para seu domínio em prod)
+const ALLOWED_ORIGINS = ["*"]; // ex.: ["https://app.seuprojeto.com"]
+function corsHeaders(origin: string | null) {
+  const allowed =
+    ALLOWED_ORIGINS.includes("*") || (origin && ALLOWED_ORIGINS.includes(origin))
+      ? origin ?? "*"
+      : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allowed,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   };
 }
 
-interface AuthResult {
-  success: boolean;
-  user?: {
-    id: string;
-    email?: string;
-  };
-  error?: string;
-}
-
-async function verifyAuth(request: Request): Promise<AuthResult> {
+async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
   try {
-    // Get Authorization header
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return {
-        success: false,
-        error: 'Missing or invalid Authorization header'
-      };
-    }
-
-    const token = authHeader.replace('Bearer ', '');
-    
-    // If it's the anon key, allow access (user is authenticated on server)
-    if (token === SUPABASE_ANON_KEY) {
-      return {
-        success: true,
-        user: {
-          id: 'anon-user',
-          email: 'authenticated@server.com'
-        }
-      };
-    }
-    
-    // Create Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    
-    // Verify the JWT token
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    
-    if (error || !user) {
-      return {
-        success: false,
-        error: 'Invalid or expired token'
-      };
-    }
-
-    return {
-      success: true,
-      user: {
-        id: user.id,
-        email: user.email
-      }
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: 'Authentication failed'
-    };
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(id);
   }
 }
 
-interface AnalysisResult {
-  success: boolean;
-  data?: {
-    address: string;
-    coordinates: {
-      lat: number;
-      lng: number;
-    };
-    coverage: {
-      google: boolean;
-      fallback?: string;
-    };
-    confidence: 'Alta' | 'Média' | 'Baixa';
-    usableArea: number;
-    areaSource: 'google' | 'estimate' | 'footprint';
-    annualIrradiation: number;
-    irradiationSource: string;
-    shadingIndex: number;
-    shadingLoss: number;
-    estimatedProduction: number;
-    verdict: 'Apto' | 'Parcial' | 'Não apto';
-    reasons: string[];
-    footprints: Array<{
-      id: string;
-      coordinates: [number, number][];
-      area: number;
-      isActive: boolean;
-    }>;
-    usageFactor: number;
-    googleSolarData?: SolarApiResponse;
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
+
+// Área do polígono (m²) usando fórmula do sapateiro + projeção simples.
+// OBS: para MVP; em produção prefira PostGIS/planar proper.
+function polygonAreaM2(coords: [number, number][]): number {
+  // coords em [lng,lat]; projeta aproximando 1° ~ 111_000 m
+  if (coords.length < 3) return 0;
+  const toXY = (lng: number, lat: number) => {
+    const x = (lng * Math.cos((lat * Math.PI) / 180)) * 111_000;
+    const y = lat * 111_000;
+    return { x, y };
   };
-  error?: string;
+  let area = 0;
+  for (let i = 0; i < coords.length; i++) {
+    const [lng1, lat1] = coords[i];
+    const [lng2, lat2] = coords[(i + 1) % coords.length];
+    const a = toXY(lng1, lat1);
+    const b = toXY(lng2, lat2);
+    area += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(area / 2);
 }
 
-async function geocodeAddress(address: string): Promise<{ lat: number; lng: number; formattedAddress: string } | null> {
-  if (!GOOGLE_MAPS_API_KEY) {
-    throw new Error('Google Maps API key not configured');
-  }
-
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${GOOGLE_MAPS_API_KEY}`;
-  
-  try {
-    const response = await fetch(url);
-    const data: GeocodeResponse = await response.json();
-    
-    if (data.status === 'OK' && data.results.length > 0) {
-      const result = data.results[0];
-      return {
-        lat: result.geometry.location.lat,
-        lng: result.geometry.location.lng,
-        formattedAddress: result.formatted_address
-      };
-    }
-    
-    return null;
-  } catch (error) {
-    console.error('Geocoding error:', error);
-    return null;
-  }
+// kWh/ano via GHI (determinístico)
+function estimateAnnualKwhByGHI(params: {
+  ghi_kwh_m2_year: number;
+  usable_area_m2: number;
+  module_eff?: number; // ~0.20
+  pr?: number; // ~0.75
+  shade_index?: number; // 0..1
+}) {
+  const eff = params.module_eff ?? 0.20;
+  const pr = params.pr ?? 0.75;
+  const shade = clamp(params.shade_index ?? 0.10, 0, 1);
+  const shadeLossFrac = 0.2 * shade; // até 20% no MVP
+  const raw =
+    params.ghi_kwh_m2_year * params.usable_area_m2 * eff * pr * (1 - shadeLossFrac);
+  const ceiling = params.ghi_kwh_m2_year * params.usable_area_m2 * 0.23 * 0.80;
+  return Math.min(raw, ceiling);
 }
 
-async function getGoogleSolarData(lat: number, lng: number): Promise<SolarApiResponse | null> {
-  if (!GOOGLE_MAPS_API_KEY) {
-    return null;
-  }
+// Classificação final
+function classifyVerdict(params: {
+  usable_area_m2: number;
+  shade_index: number;
+  azimuth_deg?: number | null;
+  tilt_deg?: number | null;
+}) {
+  const reasons: string[] = [];
+  const area = params.usable_area_m2;
+  const shade = clamp(params.shade_index, 0, 1);
+  const az = params.azimuth_deg ?? 0; // Norte
+  const tilt = params.tilt_deg ?? 15;
 
-  const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&key=${GOOGLE_MAPS_API_KEY}`;
-  
-  try {
-    const response = await fetch(url);
-    const data: SolarApiResponse = await response.json();
-    
-    if (data.error) {
-      console.log('Google Solar API error:', data.error);
-      return null;
-    }
-    
-    return data;
-  } catch (error) {
-    console.error('Google Solar API error:', error);
-    return null;
-  }
-}
-
-function calculateFallbackAnalysis(lat: number, lng: number, address: string): AnalysisResult['data'] {
-  // Estimativas baseadas na localização geográfica
-  const isInBrazil = lat >= -35 && lat <= 5 && lng >= -75 && lng <= -30;
-  const isInSoutheastBrazil = lat >= -25 && lat <= -14 && lng >= -52 && lng <= -39;
-  
-  // Irradiação estimada por região (kWh/m²/ano)
-  let annualIrradiation: number;
-  if (isInSoutheastBrazil) {
-    annualIrradiation = Math.floor(Math.random() * 200) + 1600; // 1600-1800 para SE
-  } else if (isInBrazil) {
-    annualIrradiation = Math.floor(Math.random() * 300) + 1500; // 1500-1800 para Brasil
-  } else {
-    annualIrradiation = Math.floor(Math.random() * 400) + 1200; // 1200-1600 para outros
-  }
-  
-  const usableArea = Math.floor(Math.random() * 150) + 50; // 50-200m²
-  const shadingIndex = Math.random() * 0.3; // 0-30% de sombra
-  const shadingLoss = Math.floor(shadingIndex * 50); // Perda por sombreamento
-  
-  // Estimativa de produção (kWh/ano)
-  const systemEfficiency = 0.15; // 15% eficiência dos painéis
-  const performanceRatio = 0.8; // 80% performance ratio
-  const estimatedProduction = Math.floor(
-    usableArea * annualIrradiation * systemEfficiency * performanceRatio * (1 - shadingIndex)
+  const azDev = Math.min(
+    Math.abs(((az + 360) % 360) - 0),
+    Math.abs(((az + 360) % 360) - 360),
   );
-  
-  // Determinar veredicto
-  let verdict: 'Apto' | 'Parcial' | 'Não apto';
-  let confidence: 'Alta' | 'Média' | 'Baixa';
-  const reasons: string[] = [];
-  
-  if (annualIrradiation >= 1600 && shadingIndex < 0.2 && usableArea >= 80) {
-    verdict = 'Apto';
-    confidence = 'Média';
-    reasons.push('Boa irradiação solar', 'Área suficiente', 'Baixo sombreamento');
-  } else if (annualIrradiation >= 1400 && shadingIndex < 0.4 && usableArea >= 50) {
-    verdict = 'Parcial';
-    confidence = 'Baixa';
-    reasons.push('Irradiação moderada', 'Área adequada');
-    if (shadingIndex >= 0.2) reasons.push('Sombreamento moderado');
-  } else {
-    verdict = 'Não apto';
-    confidence = 'Baixa';
-    if (annualIrradiation < 1400) reasons.push('Baixa irradiação');
-    if (usableArea < 50) reasons.push('Área insuficiente');
-    if (shadingIndex >= 0.4) reasons.push('Excesso de sombreamento');
+  const tiltOk = tilt >= 5 && tilt <= 35;
+  const shadeOk = shade < 0.2;
+  const areaApto = area >= 15;
+
+  if (areaApto && shadeOk && azDev <= 45 && tiltOk) {
+    return { verdict: "Apto" as const, reasons: ["Área suficiente", "Baixo sombreamento", "Orientação favorável"] };
   }
-  
-  return {
-    address,
-    coordinates: { lat, lng },
-    coverage: {
-      google: false,
-      fallback: 'Usando estimativas baseadas em dados de irradiação regional'
-    },
-    confidence,
-    usableArea,
-    areaSource: 'estimate',
-    annualIrradiation,
-    irradiationSource: 'Estimativa regional',
-    shadingIndex,
-    shadingLoss,
-    estimatedProduction,
-    verdict,
-    reasons,
-    footprints: [
-      {
-        id: '1',
-        coordinates: [
-          [lng - 0.0002, lat - 0.0001],
-          [lng + 0.0002, lat - 0.0001],
-          [lng + 0.0002, lat + 0.0001],
-          [lng - 0.0002, lat + 0.0001]
-        ],
-        area: usableArea,
-        isActive: true
-      }
-    ],
-    usageFactor: 0.75
-  };
+  if ((area >= 10 && shade < 0.4) && (azDev <= 60 || tiltOk)) {
+    if (area < 15) reasons.push("Área no limite");
+    if (!shadeOk) reasons.push("Sombreamento moderado");
+    if (!tiltOk) reasons.push("Inclinação fora do ideal");
+    if (azDev > 45) reasons.push("Orientação não ideal");
+    return { verdict: "Parcial" as const, reasons: reasons.length ? reasons : ["Condições parcialmente favoráveis"] };
+  }
+  if (area < 10) reasons.push("Área insuficiente");
+  if (shade >= 0.4) reasons.push("Sombreamento elevado");
+  if (azDev > 90) reasons.push("Orientação desfavorável");
+  return { verdict: "Não apto" as const, reasons: reasons.length ? reasons : ["Condições desfavoráveis"] };
 }
 
-function processGoogleSolarData(solarData: SolarApiResponse, address: string, lat: number, lng: number): AnalysisResult['data'] {
-  const solarPotential = solarData.solarPotential!;
-  
-  const usableArea = Math.floor(solarPotential.maxArrayAreaMeters2 || solarPotential.wholeRoofStats.areaMeters2 * 0.7);
-  const annualIrradiation = Math.floor(solarPotential.maxSunshineHoursPerYear * 5.5);
-  
-  // Calcular índice de sombreamento baseado na diferença entre quantis extremos
-  const sunshineQuantiles = solarPotential.wholeRoofStats.sunshineQuantiles;
-  const minSunshine = sunshineQuantiles[0] || 0;
-  const maxSunshine = sunshineQuantiles[sunshineQuantiles.length - 1] || 1000;
-  const medianSunshine = sunshineQuantiles[Math.floor(sunshineQuantiles.length / 2)] || 500;
-  
-  const shadingIndex = Math.max(0, 1 - (medianSunshine / maxSunshine));
-  const shadingLoss = Math.floor(shadingIndex * 100);
-  
-  // Usar dados de configuração de painéis se disponível
+/* ========= DATASOURCES ========= */
+
+// Geocode (Google)
+async function geocodeAddress(address: string) {
+  if (!GOOGLE_MAPS_API_KEY) throw new Error("Google Maps API key não configurada");
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+    address,
+  )}&key=${GOOGLE_MAPS_API_KEY}`;
+  const res = await fetchWithTimeout(url, 8000);
+  const j = await res.json();
+  if (j.status === "OK" && j.results?.length) {
+    const r = j.results[0];
+    return {
+      lat: r.geometry.location.lat as number,
+      lng: r.geometry.location.lng as number,
+      formatted: r.formatted_address as string,
+    };
+  }
+  return null;
+}
+
+// Google Solar API – buildingInsights:findClosest
+async function getGoogleSolarData(lat: number, lng: number): Promise<SolarApiResponse | null> {
+  if (!GOOGLE_SOLAR_API_KEY) return null;
+  const url =
+    `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&key=${GOOGLE_SOLAR_API_KEY}`;
+  const res = await fetchWithTimeout(url, 8000);
+  const j = (await res.json()) as SolarApiResponse;
+  if (j?.error) return null;
+  if (!j?.solarPotential) return null;
+  return j;
+}
+
+// PVGIS: E_y (kWh/kWp/ano)
+async function getPVGISYield(lat: number, lng: number) {
+  const url =
+    `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${lat}&lon=${lng}&peakpower=1&loss=14&outputformat=json`;
+  const res = await fetchWithTimeout(url, 8000);
+  if (!res.ok) return null;
+  const j = await res.json();
+  const Ey = j?.outputs?.totals?.fixed?.E_y;
+  if (typeof Ey === "number" && Ey > 0) return { Ey_kwh_per_kwp_year: Ey };
+  return null;
+}
+
+// NASA POWER: soma anual de GHI (kWh/m²/ano)
+async function getNASAGHI(lat: number, lng: number) {
+  const year = new Date().getFullYear() - 1;
+  const start = `${year}0101`;
+  const end = `${year}1231`;
+  const url =
+    `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN&community=RE&longitude=${lng}&latitude=${lat}&start=${start}&end=${end}&format=JSON`;
+  const res = await fetchWithTimeout(url, 8000);
+  if (!res.ok) return null;
+  const j = await res.json();
+  const days = j?.properties?.parameter?.ALLSKY_SFC_SW_DWN;
+  if (!days) return null;
+  const sum = Object.values(days).reduce(
+    (acc: number, v: any) => acc + (typeof v === "number" ? v : 0),
+    0,
+  );
+  return { ghi_kwh_m2_year: sum as number };
+}
+
+/* ========= PROCESSADORES ========= */
+
+function processGoogleSolarData(
+  solar: SolarApiResponse,
+  address: string,
+  lat: number,
+  lng: number,
+) {
+  const sp = solar.solarPotential!;
+  const wholeArea = sp.wholeRoofStats?.areaMeters2 ?? 0;
+  const usableArea = Math.floor(sp.maxArrayAreaMeters2 ?? wholeArea * 0.70);
+  const usageFactor = 0.80;
+
+  // Shade index pela razão mediana/max das horas de sol
+  const q = sp.wholeRoofStats?.sunshineQuantiles ?? [];
+  const maxSun = q.length ? q[q.length - 1] : sp.maxSunshineHoursPerYear ?? 0;
+  const medSun = q.length ? q[Math.floor(q.length / 2)] : (maxSun || 1) * 0.85;
+  const shadeIndex = clamp(1 - (maxSun > 0 ? medSun / maxSun : 0.85), 0, 1);
+  const shadingLoss = Math.round(0.2 * shadeIndex * 100);
+
   let estimatedProduction = 0;
-  if (solarPotential.solarPanelConfigs && solarPotential.solarPanelConfigs.length > 0) {
-    const bestConfig = solarPotential.solarPanelConfigs.reduce((best, current) => 
-      current.yearlyEnergyDcKwh > best.yearlyEnergyDcKwh ? current : best
+  if (sp.solarPanelConfigs?.length) {
+    const best = sp.solarPanelConfigs.reduce((a, b) =>
+      (b.yearlyEnergyDcKwh ?? 0) > (a.yearlyEnergyDcKwh ?? 0) ? b : a,
     );
-    estimatedProduction = Math.floor(bestConfig.yearlyEnergyDcKwh);
+    // Aplica perda por sombra no DC (aproximação)
+    estimatedProduction = Math.floor((best.yearlyEnergyDcKwh ?? 0) * (1 - 0.2 * shadeIndex));
   } else {
-    // Fallback calculation
-    estimatedProduction = Math.floor(usableArea * annualIrradiation * 0.15 * 0.8);
+    // Proxy de GHI (quando não há configs) – aproxima a partir de horas de sol
+    const proxyGHI = (sp.maxSunshineHoursPerYear ?? 1500); // kWh/m²/ano aproximado
+    estimatedProduction = Math.floor(
+      estimateAnnualKwhByGHI({
+        ghi_kwh_m2_year: proxyGHI,
+        usable_area_m2: usableArea * usageFactor,
+        shade_index: shadeIndex,
+      }),
+    );
   }
-  
-  // Determinar veredicto baseado nos dados do Google
-  let verdict: 'Apto' | 'Parcial' | 'Não apto';
-  let confidence: 'Alta' | 'Média' | 'Baixa' = 'Alta';
-  const reasons: string[] = [];
-  
-  if (annualIrradiation >= 1600 && shadingIndex < 0.2 && usableArea >= 80) {
-    verdict = 'Apto';
-    reasons.push('Dados Google Solar confirmam viabilidade', 'Excelente potencial solar', 'Área suficiente');
-  } else if (annualIrradiation >= 1400 && shadingIndex < 0.4 && usableArea >= 50) {
-    verdict = 'Parcial';
-    reasons.push('Potencial solar moderado', 'Área adequada');
-    if (shadingIndex >= 0.2) reasons.push('Sombreamento identificado');
-  } else {
-    verdict = 'Não apto';
-    confidence = 'Média';
-    if (annualIrradiation < 1400) reasons.push('Baixo potencial solar');
-    if (usableArea < 50) reasons.push('Área insuficiente identificada');
-    if (shadingIndex >= 0.4) reasons.push('Excesso de sombreamento detectado');
-  }
-  
-  // Converter segmentos de telhado em footprints
-  const footprints = solarPotential.roofSegmentStats.map((segment, index) => ({
-    id: (index + 1).toString(),
-    coordinates: [
-      [segment.boundingBox.sw.longitude, segment.boundingBox.sw.latitude],
-      [segment.boundingBox.ne.longitude, segment.boundingBox.sw.latitude],
-      [segment.boundingBox.ne.longitude, segment.boundingBox.ne.latitude],
-      [segment.boundingBox.sw.longitude, segment.boundingBox.ne.latitude]
-    ] as [number, number][],
-    area: Math.floor(segment.stats.areaMeters2),
-    isActive: index === 0
-  }));
-  
-  return {
+
+  // Azimute/Tilt médios (opcional para classificação)
+  const avgAz =
+    sp.roofSegmentStats?.length
+      ? sp.roofSegmentStats.reduce((a, s) => a + (s.azimuthDegrees ?? 0), 0) /
+        sp.roofSegmentStats.length
+      : 0;
+  const avgTilt =
+    sp.roofSegmentStats?.length
+      ? sp.roofSegmentStats.reduce((a, s) => a + (s.pitchDegrees ?? 15), 0) /
+        sp.roofSegmentStats.length
+      : 15;
+
+  const cls = classifyVerdict({
+    usable_area_m2: usableArea * usageFactor,
+    shade_index: shadeIndex,
+    azimuth_deg: avgAz,
+    tilt_deg: avgTilt,
+  });
+
+  return AnalysisSchema.parse({
     address,
     coordinates: { lat, lng },
-    coverage: {
-      google: true
-    },
-    confidence,
-    usableArea,
-    areaSource: 'google',
-    annualIrradiation,
-    irradiationSource: 'Google Solar API',
-    shadingIndex,
+    coverage: { google: true },
+    confidence: "Alta",
+    usableArea: Math.max(0, Math.round(usableArea * usageFactor)),
+    areaSource: "google",
+    annualIrradiation: Math.round(sp.maxSunshineHoursPerYear ?? 0), // proxy p/ exibição
+    irradiationSource: "Google Solar API",
+    shadingIndex: Number(shadeIndex.toFixed(2)),
     shadingLoss,
     estimatedProduction,
-    verdict,
-    reasons,
-    footprints: footprints.length > 0 ? footprints : [
-      {
-        id: '1',
-        coordinates: [
-          [lng - 0.0002, lat - 0.0001],
-          [lng + 0.0002, lat - 0.0001],
-          [lng + 0.0002, lat + 0.0001],
-          [lng - 0.0002, lat + 0.0001]
-        ],
-        area: usableArea,
-        isActive: true
-      }
-    ],
-    usageFactor: 0.8,
-    googleSolarData: solarData
-  };
+    verdict: cls.verdict,
+    reasons: cls.reasons,
+    usageFactor,
+    googleSolarData: solar,
+  });
 }
+
+async function processFallbackAnalysis(opts: {
+  lat: number;
+  lng: number;
+  address: string;
+  polygon?: { type: "Polygon"; coordinates: number[][][] };
+  usableAreaOverride?: number;
+}) {
+  const { lat, lng, address, polygon, usableAreaOverride } = opts;
+
+  // 1) Área utilizável (determinística)
+  //    - Se polygon → calcula área do 1º anel e aplica fator de uso
+  //    - Se override → usa override
+  //    - Senão → heurística fixa (60 m²) – determinística
+  const usageFactor = 0.75;
+  let usableArea = 60; // m² (heurística constante p/ MVP)
+  let areaSource: "manual" | "estimate" | "footprint" = "estimate";
+
+  if (usableAreaOverride && usableAreaOverride > 0) {
+    usableArea = usableAreaOverride;
+    areaSource = "manual";
+  } else if (polygon?.coordinates?.length) {
+    const ring = polygon.coordinates[0] as [number, number][];
+    const polyArea = polygonAreaM2(ring);
+    usableArea = Math.max(0, polyArea * usageFactor);
+    areaSource = "manual";
+  }
+
+  // 2) Irradiação: PVGIS (E_y) → converte p/ GHI proxy → senão NASA GHI
+  let ghi_kwh_m2_year = 0;
+  let irradiationSource = "";
+
+  const pvgis = await getPVGISYield(lat, lng).catch(() => null);
+  if (pvgis?.Ey_kwh_per_kwp_year) {
+    // E_y ≈ GHI * eff * PR  →  GHI ≈ E_y / (eff*PR)
+    const eff = 0.20;
+    const pr = 0.75;
+    ghi_kwh_m2_year = pvgis.Ey_kwh_per_kwp_year / (eff * pr); // ≈ /0.15
+    irradiationSource = "PVGIS (GHI estimado via E_y)";
+  } else {
+    const nasa = await getNASAGHI(lat, lng).catch(() => null);
+    if (nasa?.ghi_kwh_m2_year) {
+      ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
+      irradiationSource = "NASA POWER (GHI)";
+    } else {
+      // último recurso, valor conservador e determinístico
+      ghi_kwh_m2_year = 1500;
+      irradiationSource = "Heurística conservadora";
+    }
+  }
+
+  // 3) Sombreamento (MVP determinístico): 0.10 (10%) → perda máx 2%
+  const shadeIndex = 0.10;
+  const shadingLossPct = Math.round(0.2 * shadeIndex * 100); // 2%
+
+  // 4) Produção anual
+  const estimatedProduction = Math.round(
+    estimateAnnualKwhByGHI({
+      ghi_kwh_m2_year,
+      usable_area_m2: usableArea,
+      shade_index: shadeIndex,
+    }),
+  );
+
+  // 5) Veredito (usando tilt/azimute padrão)
+  const cls = classifyVerdict({
+    usable_area_m2: usableArea,
+    shade_index: shadeIndex,
+    azimuth_deg: 0,
+    tilt_deg: 15,
+  });
+
+  return AnalysisSchema.parse({
+    address,
+    coordinates: { lat, lng },
+    coverage: { google: false, fallback: "PVGIS/NASA" },
+    confidence: "Média",
+    usableArea: Math.round(usableArea),
+    areaSource,
+    annualIrradiation: Math.round(ghi_kwh_m2_year),
+    irradiationSource,
+    shadingIndex: shadeIndex,
+    shadingLoss: shadingLossPct,
+    estimatedProduction,
+    verdict: cls.verdict,
+    reasons: cls.reasons,
+    usageFactor,
+  });
+}
+
+/* ========= AUTH ========= */
+
+async function verifyAuth(req: Request) {
+  const auth = req.headers.get("Authorization");
+  if (!auth?.startsWith("Bearer ")) {
+    return { ok: false as const, error: "Missing or invalid Authorization header" };
+  }
+  const token = auth.replace("Bearer ", "").trim();
+  // ⚠️ NÃO aceite ANON KEY como token de usuário
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+    return { ok: false as const, error: "Supabase env not configured" };
+  }
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data, error } = await supabase.auth.getUser(token);
+  if (error || !data?.user) {
+    return { ok: false as const, error: "Invalid or expired token" };
+  }
+  return { ok: true as const, user: { id: data.user.id, email: data.user.email ?? undefined } };
+}
+
+/* ========= HANDLER ========= */
 
 Deno.serve(async (req: Request) => {
-  // Handle CORS
-  if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, apikey, x-client-info',
-      },
+  const headers = corsHeaders(req.headers.get("origin"));
+
+  // CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...headers, "Content-Type": "application/json" },
     });
   }
 
-  if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ success: false, error: 'Method not allowed' }),
-      {
-        status: 405,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    );
-  }
-
   try {
-    // Verify authentication
-    const authResult = await verifyAuth(req);
-    if (!authResult.success) {
-      return new Response(
-        JSON.stringify({ success: false, error: authResult.error || 'Authentication required' }),
-        {
-          status: 401,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        }
-      );
+    // Auth
+    const auth = await verifyAuth(req);
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ success: false, error: auth.error }), {
+        status: 401,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
     }
 
-    const body: AnalyzeRequest = await req.json();
-    const { address } = body;
+    // Body
+    const json = await req.json();
+    const input = AnalyzeRequestSchema.parse(json);
 
-    if (!address || typeof address !== 'string') {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Address is required' }),
-        {
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        }
-      );
+    // 1) Geocode
+    const geo = await geocodeAddress(input.address);
+    if (!geo) {
+      return new Response(JSON.stringify({ success: false, error: "Could not geocode address" }), {
+        status: 400,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
     }
 
-    console.log(`User ${authResult.user?.id} analyzing address: ${address}`);
+    const { lat, lng, formatted } = geo;
 
-    // Step 1: Geocode the address
-    const geocodeResult = await geocodeAddress(address);
-    if (!geocodeResult) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Could not geocode address' }),
-        {
-          status: 400,
-          headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          },
-        }
-      );
-    }
-
-    const { lat, lng, formattedAddress } = geocodeResult;
-    console.log(`Geocoded to: ${lat}, ${lng}`);
-
-    // Step 2: Try Google Solar API
-    const solarData = await getGoogleSolarData(lat, lng);
-    
-    let analysisData: AnalysisResult['data'];
-    
-    if (solarData && solarData.solarPotential) {
-      console.log('Using Google Solar API data');
-      analysisData = processGoogleSolarData(solarData, formattedAddress, lat, lng);
+    // 2) Google Solar (se disponível)
+    let analysis;
+    const google = await getGoogleSolarData(lat, lng).catch(() => null);
+    if (google?.solarPotential) {
+      analysis = processGoogleSolarData(google, formatted, lat, lng);
     } else {
-      console.log('Google Solar API not available, using fallback analysis');
-      analysisData = calculateFallbackAnalysis(lat, lng, formattedAddress);
+      // 3) Fallback PVGIS → NASA
+      analysis = await processFallbackAnalysis({
+        lat,
+        lng,
+        address: formatted,
+        polygon: input.polygon as any,
+        usableAreaOverride: input.usableAreaOverride,
+      });
     }
 
-    const result: AnalysisResult = {
-      success: true,
-      data: analysisData
-    };
-
-    return new Response(
-      JSON.stringify(result),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    );
-
-  } catch (error) {
-    console.error('Analysis error:', error);
-    
-    const result: AnalysisResult = {
-      success: false,
-      error: error instanceof Error ? error.message : 'Internal server error'
-    };
-
-    return new Response(
-      JSON.stringify(result),
-      {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    );
+    return new Response(JSON.stringify({ success: true, data: analysis }), {
+      status: 200,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Internal error";
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 500,
+      headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+    });
   }
 });

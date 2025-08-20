@@ -44,6 +44,10 @@ interface AnalysisContextType {
   setHasCredits: (credits: boolean) => void;
   selectedAddress: string;
   setSelectedAddress: (address: string) => void;
+  drawingMode: boolean;
+  setDrawingMode: (drawing: boolean) => void;
+  currentPolygon: { type: "Polygon"; coordinates: number[][][] } | null;
+  setCurrentPolygon: (polygon: { type: "Polygon"; coordinates: number[][][] } | null) => void;
 }
 
 const defaultData: AnalysisData = {
@@ -75,6 +79,8 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [hasCredits, setHasCredits] = useState(true);
   const [selectedAddress, setSelectedAddress] = useState("");
+  const [drawingMode, setDrawingMode] = useState(false);
+  const [currentPolygon, setCurrentPolygon] = useState<{ type: "Polygon"; coordinates: number[][][] } | null>(null);
 
   const updateData = (updates: Partial<AnalysisData>) => {
     setData(prev => ({ ...prev, ...updates }));
@@ -91,7 +97,11 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       hasCredits,
       setHasCredits,
       selectedAddress,
-      setSelectedAddress
+      setSelectedAddress,
+      drawingMode,
+      setDrawingMode,
+      currentPolygon,
+      setCurrentPolygon
     }}>
       {children}
     </AnalysisContext.Provider>
