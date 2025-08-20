@@ -50,6 +50,8 @@ interface AnalysisContextType {
   setCurrentPolygon: (polygon: { type: "Polygon"; coordinates: number[][][] } | null) => void;
   hasAnalysisResults: boolean;
   setHasAnalysisResults: (hasResults: boolean) => void;
+  hasFootprintFromAction: boolean;
+  setHasFootprintFromAction: (hasFootprint: boolean) => void;
 }
 
 const defaultData: AnalysisData = {
@@ -84,6 +86,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [drawingMode, setDrawingMode] = useState(false);
   const [currentPolygon, setCurrentPolygon] = useState<{ type: "Polygon"; coordinates: number[][][] } | null>(null);
   const [hasAnalysisResults, setHasAnalysisResults] = useState(false);
+  const [hasFootprintFromAction, setHasFootprintFromAction] = useState(false);
 
   const updateData = (updates: Partial<AnalysisData>) => {
     setData(prev => ({ ...prev, ...updates }));
@@ -106,7 +109,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       currentPolygon,
       setCurrentPolygon,
       hasAnalysisResults,
-      setHasAnalysisResults
+      setHasAnalysisResults,
+      hasFootprintFromAction,
+      setHasFootprintFromAction
     }}>
       {children}
     </AnalysisContext.Provider>

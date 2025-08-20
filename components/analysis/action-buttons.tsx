@@ -15,7 +15,9 @@ export function ActionButtons() {
     currentPolygon, 
     selectedAddress, 
     setIsLoading, 
-    setError 
+    setError,
+    setHasFootprintFromAction,
+    hasFootprintFromAction
   } = useAnalysis();
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -94,6 +96,9 @@ export function ActionButtons() {
             usableArea: Math.round(footprintData.area * 0.75),
             confidence: footprintData.confidence
           });
+          
+          // Mark that footprint came from manual action
+          setHasFootprintFromAction(true);
           
           const locationSource = data.address.includes(',') && data.address.includes('.') ? 'pin' : 'endereço';
           alert(`Footprint encontrado usando ${locationSource}! Área: ${footprintData.area}m² (${footprintData.source})`);
@@ -303,7 +308,7 @@ export function ActionButtons() {
               {selectedAddress && data.footprints.length === 0 && !currentPolygon && "Busque footprint automático ou desenhe o telhado"}
             </p>
           )}
-          {data.footprints.length > 0 && (
+          {data.footprints.length > 0 && hasFootprintFromAction && (
             <p className="text-green-600">
               Telhado detectado ({Math.round(data.footprints[0]?.area || 0)}m²) - {data.areaSource}
             </p>

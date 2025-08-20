@@ -64,7 +64,7 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
 export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibreMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon } = useAnalysis();
+  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<string>(layer);
   const [showAttribution, setShowAttribution] = useState(false);
@@ -416,6 +416,9 @@ export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibr
         usableArea: Math.round(area * 0.75), // Apply usage factor
         confidence: 'Média' as const
       });
+      
+      // Mark that footprint came from manual action (drawing)
+      setHasFootprintFromAction(true);
       
       // Set polygon for analysis API (coordinates are already in [lng,lat] format)
       setCurrentPolygon({

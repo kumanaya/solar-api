@@ -5,7 +5,7 @@ import { Search, MapPin, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useAnalysis } from "./analysis-context";
-import { getFootprints, transformFootprintData } from "@/lib/footprints-api";
+// Footprint search removed from auto-search - now manual via button
 
 interface AddressSuggestion {
   display_name: string;
@@ -134,8 +134,7 @@ export function AddressSearch() {
       coordinates: [lng, lat] as [number, number]
     });
     
-    // Try to get footprint for this location
-    tryGetFootprint(lat, lng);
+    // Don't automatically search for footprint - let user click button
   };
 
 
@@ -190,8 +189,7 @@ export function AddressSearch() {
             coordinates: [lng, lat] as [number, number]
           });
           
-          // Try to get footprint for this location
-          tryGetFootprint(lat, lng);
+          // Don't automatically search for footprint - let user click button
         } else {
           setError('Endereço não encontrado');
         }
@@ -208,45 +206,8 @@ export function AddressSearch() {
     setShowSuggestions(false);
   };
   
-  // Try to get building footprint for coordinates
-  const tryGetFootprint = async (lat: number, lng: number) => {
-    try {
-      console.log('Trying to get footprint for:', { lat, lng });
-      const footprintResponse = await getFootprints(lat, lng);
-      
-      if (footprintResponse.success && footprintResponse.data?.polygon) {
-        console.log('Footprint found:', footprintResponse.data);
-        
-        // Transform footprint data to frontend format
-        const footprintData = transformFootprintData(footprintResponse.data);
-        
-        if (footprintData) {
-          // Update footprints in context
-          updateData({
-            footprints: [footprintData],
-            areaSource: 'footprint' as const,
-            usableArea: Math.round(footprintData.area * 0.75), // Apply usage factor
-            confidence: footprintData.confidence
-          });
-          
-          // Set polygon for analysis API
-          setCurrentPolygon({
-            type: "Polygon",
-            coordinates: [footprintData.coordinates.map(coord => [coord[1], coord[0]])]
-          });
-          
-          console.log('Footprint successfully applied to map');
-        }
-      } else {
-        console.log('No footprint found, will need manual drawing:', footprintResponse.error);
-        // No footprint found - user will need to draw manually
-        // We don't automatically enable drawing mode here, let user decide
-      }
-    } catch (error) {
-      console.error('Error getting footprint:', error);
-      // Continue without footprint - user can draw manually if needed
-    }
-  };
+  // Function removed - footprint search moved to action-buttons.tsx
+  // Users now need to click "Buscar Footprint Automático" button
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
