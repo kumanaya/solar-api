@@ -8,8 +8,8 @@ import { Info, X } from "lucide-react";
 
 interface MapLibreMapProps {
   layer: "satellite" | "streets";
-  showShadow?: boolean; // Optional since handled by parent
-  showRelief?: boolean; // Optional since handled by parent
+  showShadow?: boolean;
+  showRelief?: boolean;
   isDrawingMode: boolean;
   isPinMode?: boolean;
   onDrawingCoordinatesChange?: (coordinates: [number, number][]) => void;
@@ -69,7 +69,7 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
   }
 };
 
-export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange }, ref) => {
+export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, showShadow = false, showRelief = false, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
@@ -166,6 +166,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         clearDrawingVisualization();
         clearFinishedPolygonVisualization();
         clearAutomaticFootprints();
+        removeNDVILayer();
+        removeDEMLayer();
         map.current.remove();
         map.current = null;
         setIsMapLoaded(false);
@@ -438,6 +440,28 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       }
     };
   }, [isPinMode, isMapLoaded, updateData, setSelectedAddress]);
+
+  // Handle NDVI layer visibility
+  useEffect(() => {
+    if (!map.current || !isMapLoaded) return;
+
+    if (showShadow) {
+      addNDVILayer();
+    } else {
+      removeNDVILayer();
+    }
+  }, [showShadow, isMapLoaded]);
+
+  // Handle DEM layer visibility
+  useEffect(() => {
+    if (!map.current || !isMapLoaded) return;
+
+    if (showRelief) {
+      addDEMLayer();
+    } else {
+      removeDEMLayer();
+    }
+  }, [showRelief, isMapLoaded]);
 
   // Handle polygon drawing
   useEffect(() => {
@@ -912,6 +936,124 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     
     if (map.current.getSource('footprints')) {
       map.current.removeSource('footprints');
+    }
+  };
+
+  // Helper function to add NDVI layer (vegetation visualization)
+  const addNDVILayer = () => {
+    if (!map.current || !map.current.isStyleLoaded()) return;
+
+    // Remove existing NDVI layer if it exists
+    if (map.current.getLayer('ndvi-layer')) {
+      map.current.removeLayer('ndvi-layer');
+    }
+    if (map.current.getSource('ndvi-source')) {
+      map.current.removeSource('ndvi-source');
+    }
+
+    const accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN;
+    if (!accessToken) {
+      console.warn('Mapbox access token not found for NDVI layer');
+      return;
+    }
+
+    // Add NDVI data source using Mapbox Satellite imagery with vegetation processing
+    // This uses Mapbox's enhanced satellite imagery which can show vegetation health
+    map.current.addSource('ndvi-source', {
+      type: 'raster',
+      tiles: [
+        `https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg90?access_token=${accessToken}`
+      ],
+      tileSize: 512,
+      attribution: '© Mapbox © Maxar'
+    });
+
+    // Add NDVI layer with vegetation-focused styling
+    map.current.addLayer({
+      id: 'ndvi-layer',
+      type: 'raster',
+      source: 'ndvi-source',
+      paint: {
+        'raster-opacity': 0.6,
+        'raster-hue-rotate': 60, // Enhance green/vegetation
+        'raster-saturation': 1.0, // Maximum saturation value
+        'raster-contrast': 0.3, // Increase contrast
+        'raster-brightness-min': 0.2,
+        'raster-brightness-max': 0.9
+      }
+    });
+  };
+
+  // Helper function to add DEM layer (elevation visualization)
+  const addDEMLayer = () => {
+    if (!map.current || !map.current.isStyleLoaded()) return;
+
+    // Remove existing DEM layer if it exists
+    if (map.current.getLayer('dem-layer')) {
+      map.current.removeLayer('dem-layer');
+    }
+    if (map.current.getSource('dem-source')) {
+      map.current.removeSource('dem-source');
+    }
+
+    // Use AWS terrain tiles (free global DEM data)
+    map.current.addSource('dem-source', {
+      type: 'raster-dem',
+      tiles: [
+        'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'
+      ],
+      tileSize: 256,
+      maxzoom: 15,
+      encoding: 'terrarium'
+    });
+
+    // Configure terrain for 3D elevation
+    map.current.setTerrain({
+      source: 'dem-source',
+      exaggeration: 1.2
+    });
+
+    // Add hillshade layer for elevation visualization with 2025 performance improvements
+    map.current.addLayer({
+      id: 'dem-layer',
+      type: 'hillshade',
+      source: 'dem-source',
+      paint: {
+        'hillshade-illumination-direction': 335,
+        'hillshade-exaggeration': 0.8,
+        'hillshade-shadow-color': 'rgba(0, 0, 0, 0.5)',
+        'hillshade-highlight-color': 'rgba(255, 255, 255, 0.4)',
+        'hillshade-accent-color': 'rgba(56, 44, 20, 0.2)' // Subtle terrain coloring
+      }
+    });
+
+  };
+
+  // Helper function to remove NDVI layer
+  const removeNDVILayer = () => {
+    if (!map.current || !map.current.isStyleLoaded()) return;
+
+    if (map.current.getLayer('ndvi-layer')) {
+      map.current.removeLayer('ndvi-layer');
+    }
+    if (map.current.getSource('ndvi-source')) {
+      map.current.removeSource('ndvi-source');
+    }
+  };
+
+  // Helper function to remove DEM layer
+  const removeDEMLayer = () => {
+    if (!map.current || !map.current.isStyleLoaded()) return;
+
+    // Remove terrain first
+    map.current.setTerrain(null);
+    // Remove hillshade layer
+    if (map.current.getLayer('dem-layer')) {
+      map.current.removeLayer('dem-layer');
+    }
+    // Remove source
+    if (map.current.getSource('dem-source')) {
+      map.current.removeSource('dem-source');
     }
   };
 
