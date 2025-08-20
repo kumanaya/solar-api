@@ -120,7 +120,7 @@ export function ResultsPanel() {
                 <p className="text-sm text-foreground">{error}</p>
                 {isFootprintError() && (
                   <p className="text-xs text-amber-600 mt-1">
-                    💡 Use a ferramenta "Desenhar Telhado" no mapa
+                    💡 Use a ferramenta &quot;Desenhar Telhado&quot; no mapa
                   </p>
                 )}
                 {!error.includes('autenticado') && !error.includes('login') && !isFootprintError() && (

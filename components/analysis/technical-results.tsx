@@ -19,10 +19,10 @@ import { useState } from "react";
 
 export function TechnicalResults() {
   const { data, updateData, isLoading, hasAnalysisResults } = useAnalysis();
+  const [localUsageFactor, setLocalUsageFactor] = useState(data.usageFactor);
   
   // Só renderizar se tivermos resultados de análise
   if (!hasAnalysisResults) return null;
-  const [localUsageFactor, setLocalUsageFactor] = useState(data.usageFactor);
 
   const handleUsageFactorChange = (value: number) => {
     setLocalUsageFactor(value);

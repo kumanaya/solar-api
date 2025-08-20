@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, forwardRef, useImperativeHandle, useCallback } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useAnalysis } from "./analysis-context";
@@ -136,6 +136,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       }
     },
     getDrawingCoordinates: () => drawingCoordinates
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [drawingCoordinates, onDrawingCoordinatesChange]);
 
   // Initialize map
@@ -356,6 +357,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     } else {
       map.current.once('styledata', addFootprints);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.footprints, isMapLoaded]);
 
   // Handle drawing and pin modes
@@ -443,9 +445,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
 
     const handleDrawingClick = (e: maplibregl.MapMouseEvent) => {
       if (!drawingMode && !isDrawingMode) return;
-
       // Check if click was on a layer (footprints or drawn polygon)
-      let features: maplibregl.MapboxGeoJSONFeature[] = [];
+      let features: maplibregl.MapGeoJSONFeature[] = [];
       
       try {
         // Check which layers exist and query only those
@@ -884,7 +885,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         if (map.current!.getLayer(layerId)) {
           map.current!.removeLayer(layerId);
         }
-      } catch (error) {
+      } catch {
         console.log(`Layer ${layerId} already removed or doesn't exist`);
       }
     });
@@ -894,7 +895,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       if (map.current.getSource('drawn-polygon')) {
         map.current.removeSource('drawn-polygon');
       }
-    } catch (error) {
+    } catch {
       console.log('Source drawn-polygon already removed or doesn\'t exist');
     }
   };

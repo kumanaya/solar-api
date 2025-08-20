@@ -21,7 +21,7 @@ export function ActionButtons() {
     hasFootprintFromAction
   } = useAnalysis();
   
-  const { handleError, isFootprintError } = useErrorHandler({
+  const { handleError } = useErrorHandler({
     onDrawManual: () => {
       // Aqui poderia ativar modo de desenho automaticamente
       console.log('User should draw manually');
