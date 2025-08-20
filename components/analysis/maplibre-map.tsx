@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useAnalysis } from "./analysis-context";
@@ -12,6 +12,14 @@ interface MapLibreMapProps {
   showRelief?: boolean; // Optional since handled by parent
   isDrawingMode: boolean;
   isPinMode?: boolean;
+  onDrawingCoordinatesChange?: (coordinates: [number, number][]) => void;
+}
+
+export interface MapLibreMapRef {
+  undoLastPoint: () => void;
+  clearDrawing: () => void;
+  getDrawingCoordinates: () => [number, number][];
+  reopenPolygon: () => void;
 }
 
 // Move function outside component to avoid re-creation
@@ -61,7 +69,7 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
   }
 };
 
-export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibreMapProps) {
+export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
@@ -71,8 +79,58 @@ export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibr
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const pinMarkerRef = useRef<maplibregl.Marker | null>(null);
   
-  // Polygon drawing state
+  // Polygon drawing state (back to local state)
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
+
+  // Expose functions to parent via ref
+  useImperativeHandle(ref, () => ({
+    undoLastPoint: () => {
+      setDrawingCoordinates(prev => {
+        if (prev.length > 0) {
+          const newCoords = prev.slice(0, -1);
+          updateDrawingVisualization(newCoords);
+          onDrawingCoordinatesChange?.(newCoords);
+          return newCoords;
+        }
+        return prev;
+      });
+    },
+    clearDrawing: () => {
+      setDrawingCoordinates([]);
+      clearDrawingVisualization();
+      onDrawingCoordinatesChange?.([]);
+    },
+    reopenPolygon: () => {
+      // Check if there's a finished polygon to reopen
+      if (data.footprints.length > 0 && data.areaSource === 'manual') {
+        const lastFootprint = data.footprints[data.footprints.length - 1];
+        if (lastFootprint.coordinates && lastFootprint.coordinates.length > 0) {
+          // Get coordinates without the closing point
+          const coords = lastFootprint.coordinates.slice(0, -1); // Remove last point (which closes the polygon)
+          
+          // Clear finished polygon visualization
+          clearFinishedPolygonVisualization();
+          
+          // Set drawing coordinates and update with a small delay
+          setDrawingCoordinates(coords);
+          setTimeout(() => {
+            updateDrawingVisualization(coords);
+            onDrawingCoordinatesChange?.(coords);
+          }, 50);
+          
+          // Clear polygon data to allow editing
+          updateData({
+            footprints: [],
+            areaSource: 'manual' as const,
+            usableArea: 0
+          });
+          setCurrentPolygon(null);
+          setHasFootprintFromAction(false);
+        }
+      }
+    },
+    getDrawingCoordinates: () => drawingCoordinates
+  }), [drawingCoordinates, onDrawingCoordinatesChange, data.footprints, data.areaSource, updateData, setCurrentPolygon, setHasFootprintFromAction]);
 
   // Initialize map
   useEffect(() => {
@@ -373,12 +431,49 @@ export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibr
       const newCoord: [number, number] = [lng, lat];
 
       setDrawingCoordinates(prev => {
+        // Se já temos pelo menos 3 pontos, verificar se clicou próximo do primeiro
+        if (prev.length >= 3) {
+          const firstPoint = prev[0];
+          const distance = calculateDistance(newCoord, firstPoint);
+          
+          // Se clicou próximo do primeiro ponto (dentro de ~10 metros), fechar polígono
+          if (distance < 0.0001) { // aproximadamente 10-15 metros
+            console.log('Closing polygon automatically - clicked near first point');
+            finishDrawing(prev);
+            setDrawingCoordinates([]);
+            return prev; // Return unchanged to avoid adding the close point
+          }
+        }
+
         const newCoords = [...prev, newCoord];
         
         // Update drawing visualization
         updateDrawingVisualization(newCoords);
+        
+        // Notify parent component
+        onDrawingCoordinatesChange?.(newCoords);
+        
         return newCoords;
       });
+    };
+
+    const handleDrawingMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (!drawingMode && !isDrawingMode) return;
+      if (drawingCoordinates.length < 3) return;
+
+      const { lng, lat } = e.lngLat;
+      const currentCoord: [number, number] = [lng, lat];
+      const firstPoint = drawingCoordinates[0];
+      const distance = calculateDistance(currentCoord, firstPoint);
+      
+      // Se está próximo do primeiro ponto, mudar cursor para indicar que pode fechar
+      if (distance < 0.0001) {
+        map.current!.getCanvas().style.cursor = 'pointer';
+        map.current!.getCanvas().title = 'Clique para fechar o polígono';
+      } else {
+        map.current!.getCanvas().style.cursor = isDrawingMode ? 'crosshair' : 'default';
+        map.current!.getCanvas().title = '';
+      }
     };
 
     const handleDrawingDoubleClick = (e: maplibregl.MapMouseEvent) => {
@@ -437,10 +532,40 @@ export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibr
     };
 
     if (drawingMode || isDrawingMode) {
-      // Clear any previous drawn polygon when starting new drawing
-      clearFinishedPolygonVisualization();
+      // Check if we should reopen an existing polygon
+      if (drawingCoordinates.length === 0 && data.footprints.length > 0 && data.areaSource === 'manual') {
+        const lastFootprint = data.footprints[data.footprints.length - 1];
+        if (lastFootprint.coordinates && lastFootprint.coordinates.length > 0) {
+          // Reopen the polygon for editing
+          const coords = lastFootprint.coordinates.slice(0, -1); // Remove closing point
+          setDrawingCoordinates(coords);
+          
+          // Clear finished polygon visualization
+          clearFinishedPolygonVisualization();
+          
+          // Small delay to ensure map layers are cleared before updating
+          setTimeout(() => {
+            updateDrawingVisualization(coords);
+            onDrawingCoordinatesChange?.(coords);
+          }, 50);
+          
+          // Clear polygon data to allow editing
+          updateData({
+            footprints: [],
+            areaSource: 'manual' as const,
+            usableArea: 0
+          });
+          setCurrentPolygon(null);
+          setHasFootprintFromAction(false);
+        }
+      } else {
+        // Clear any previous drawn polygon when starting new drawing
+        clearFinishedPolygonVisualization();
+      }
+      
       map.current.on('click', handleDrawingClick);
       map.current.on('dblclick', handleDrawingDoubleClick);
+      map.current.on('mousemove', handleDrawingMouseMove);
     } else {
       setDrawingCoordinates([]);
       clearDrawingVisualization();
@@ -450,10 +575,18 @@ export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibr
       if (map.current) {
         map.current.off('click', handleDrawingClick);
         map.current.off('dblclick', handleDrawingDoubleClick);
+        map.current.off('mousemove', handleDrawingMouseMove);
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drawingMode, isDrawingMode, isMapLoaded, drawingCoordinates, updateData, setCurrentPolygon]);
+
+  // Helper function to calculate distance between two points in degrees
+  const calculateDistance = (point1: [number, number], point2: [number, number]): number => {
+    const [lng1, lat1] = point1;
+    const [lng2, lat2] = point2;
+    return Math.sqrt(Math.pow(lng2 - lng1, 2) + Math.pow(lat2 - lat1, 2));
+  };
 
   // Helper function to calculate polygon area
   const calculatePolygonArea = (coords: [number, number][]): number => {
@@ -683,14 +816,24 @@ export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibr
   const clearFinishedPolygonVisualization = () => {
     if (!map.current || !map.current.isStyleLoaded()) return;
 
+    // Remove layers first
     ['drawn-polygon-fill', 'drawn-polygon-outline'].forEach(layerId => {
-      if (map.current!.getLayer(layerId)) {
-        map.current!.removeLayer(layerId);
+      try {
+        if (map.current!.getLayer(layerId)) {
+          map.current!.removeLayer(layerId);
+        }
+      } catch (error) {
+        console.log(`Layer ${layerId} already removed or doesn't exist`);
       }
     });
     
-    if (map.current.getSource('drawn-polygon')) {
-      map.current.removeSource('drawn-polygon');
+    // Then remove source
+    try {
+      if (map.current.getSource('drawn-polygon')) {
+        map.current.removeSource('drawn-polygon');
+      }
+    } catch (error) {
+      console.log('Source drawn-polygon already removed or doesn\'t exist');
     }
   };
 
@@ -828,4 +971,6 @@ export function MapLibreMap({ layer, isDrawingMode, isPinMode = false }: MapLibr
       `}</style>
     </div>
   );
-}
+});
+
+MapLibreMap.displayName = 'MapLibreMap';

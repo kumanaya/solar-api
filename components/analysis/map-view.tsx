@@ -1,6 +1,7 @@
 "use client";
 
-import { MapLibreMap } from "./maplibre-map";
+import { forwardRef } from "react";
+import { MapLibreMap, MapLibreMapRef } from "./maplibre-map";
 
 interface MapViewProps {
   layer: "satellite" | "streets";
@@ -8,17 +9,20 @@ interface MapViewProps {
   showRelief: boolean;
   isDrawingMode: boolean;
   isPinMode?: boolean;
+  onDrawingCoordinatesChange?: (coordinates: [number, number][]) => void;
 }
 
-export function MapView({ layer, showShadow, showRelief, isDrawingMode, isPinMode = false }: MapViewProps) {
+export const MapView = forwardRef<MapLibreMapRef, MapViewProps>(({ layer, showShadow, showRelief, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange }, ref) => {
   return (
     <div className="h-full w-full relative">
       <MapLibreMap 
+        ref={ref}
         layer={layer}
         showShadow={showShadow}
         showRelief={showRelief}
         isDrawingMode={isDrawingMode}
         isPinMode={isPinMode}
+        onDrawingCoordinatesChange={onDrawingCoordinatesChange}
       />
       
       {/* Overlay de sombra (NDVI) - rendered on top of map */}
@@ -32,4 +36,6 @@ export function MapView({ layer, showShadow, showRelief, isDrawingMode, isPinMod
       )}
     </div>
   );
-}
+});
+
+MapView.displayName = 'MapView';

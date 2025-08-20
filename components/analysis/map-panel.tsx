@@ -1,18 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { AddressSearch } from "./address-search";
 import { MapView } from "./map-view";
 import { DrawingToolbar } from "./drawing-toolbar";
 import { LayerToggles } from "./layer-toggles";
 import { MapPin } from "lucide-react";
+import { MapLibreMapRef } from "./maplibre-map";
 
 export function MapPanel() {
+  const mapRef = useRef<MapLibreMapRef>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
   const [mapLayer, setMapLayer] = useState<"satellite" | "streets">("satellite");
   const [showShadow, setShowShadow] = useState(false);
   const [showRelief, setShowRelief] = useState(false);
+  const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
+
+  // Drawing toolbar functions
+  const handleUndoLastPoint = () => {
+    mapRef.current?.undoLastPoint();
+  };
+
+  const handleClearDrawing = () => {
+    mapRef.current?.clearDrawing();
+  };
+
+  // Callback to sync coordinates from map
+  const handleDrawingCoordinatesChange = (coordinates: [number, number][]) => {
+    setDrawingCoordinates(coordinates);
+  };
 
   return (
     <div className="relative h-full w-full">
@@ -24,7 +41,12 @@ export function MapPanel() {
       {/* Toolbar de desenho - quando ativo */}
       {isDrawingMode && (
         <div className="absolute top-16 md:top-20 left-2 md:left-4 z-20">
-          <DrawingToolbar onExit={() => setIsDrawingMode(false)} />
+          <DrawingToolbar 
+            onExit={() => setIsDrawingMode(false)}
+            drawingCoordinates={drawingCoordinates}
+            onUndoLastPoint={handleUndoLastPoint}
+            onClearDrawing={handleClearDrawing}
+          />
         </div>
       )}
 
@@ -84,11 +106,13 @@ export function MapPanel() {
 
       {/* Mapa principal */}
       <MapView
+        ref={mapRef}
         layer={mapLayer}
         showShadow={showShadow}
         showRelief={showRelief}
         isDrawingMode={isDrawingMode}
         isPinMode={isPinMode}
+        onDrawingCoordinatesChange={handleDrawingCoordinatesChange}
       />
 
       {/* Instruções de desenho - quando ativo */}

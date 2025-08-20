@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, DollarSign, Save, Loader2, Trash2, Undo2, Zap, Search } from "lucide-react";
+import { FileText, DollarSign, Loader2, Zap, Search } from "lucide-react";
 import { useAnalysis } from "./analysis-context";
 import { PDFModal } from "./pdf-modal";
 import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
@@ -28,15 +28,8 @@ export function ActionButtons() {
     }
   });
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSearchingFootprints, setIsSearchingFootprints] = useState(false);
-  const [previousState, setPreviousState] = useState<{
-    footprints: typeof data.footprints;
-    areaSource: typeof data.areaSource;
-    usableArea: number;
-    confidence: typeof data.confidence;
-  } | null>(null);
 
   const handleOpenPDFModal = () => {
     setIsPDFModalOpen(true);
@@ -54,20 +47,6 @@ export function ActionButtons() {
     }
   };
 
-  const handleSaveAnalysis = async () => {
-    setIsSaving(true);
-    try {
-      // Simular salvamento
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log("Análise salva:", data.address);
-      alert("Análise salva com sucesso!");
-    } catch (error) {
-      console.error("Erro ao salvar análise:", error);
-      alert("Erro ao salvar análise. Tente novamente.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleSearchFootprints = async () => {
     if (!data.coordinates) {
@@ -75,13 +54,6 @@ export function ActionButtons() {
       return;
     }
 
-    // Salvar estado anterior antes de fazer mudanças
-    setPreviousState({
-      footprints: data.footprints,
-      areaSource: data.areaSource,
-      usableArea: data.usableArea,
-      confidence: data.confidence
-    });
 
     setIsSearchingFootprints(true);
     setError(null);
@@ -126,42 +98,6 @@ export function ActionButtons() {
     }
   };
 
-  const handleClearPolygons = () => {
-    // Salvar estado anterior antes de limpar
-    setPreviousState({
-      footprints: data.footprints,
-      areaSource: data.areaSource,
-      usableArea: data.usableArea,
-      confidence: data.confidence
-    });
-
-    // Limpar todos os polígonos e resetar dados relacionados
-    updateData({
-      footprints: [],
-      areaSource: 'estimate' as const,
-      usableArea: 0,
-      confidence: 'Baixa' as const
-    });
-
-    console.log('All polygons cleared');
-  };
-
-  const handleUndoLastAction = () => {
-    if (previousState) {
-      // Restaurar estado anterior
-      updateData({
-        footprints: previousState.footprints,
-        areaSource: previousState.areaSource,
-        usableArea: previousState.usableArea,
-        confidence: previousState.confidence
-      });
-
-      // Limpar o estado anterior (só permite um undo)
-      setPreviousState(null);
-      
-      console.log('Reverted to previous state');
-    }
-  };
   
   
   const handleRunAnalysis = async () => {
@@ -248,41 +184,6 @@ export function ActionButtons() {
           Gerar PDF do Laudo
         </Button>
 
-      {/* Botões secundários */}
-      <div className="grid grid-cols-3 gap-2">
-        <Button 
-          variant="outline" 
-          onClick={handleClearPolygons}
-          disabled={data.footprints.length === 0}
-          title="Limpar todos os polígonos"
-        >
-          <Trash2 className="mr-1 h-4 w-4" />
-          Limpar
-        </Button>
-
-        <Button 
-          variant="outline" 
-          onClick={handleUndoLastAction}
-          disabled={!previousState}
-          title="Voltar à seleção anterior"
-        >
-          <Undo2 className="mr-1 h-4 w-4" />
-          Voltar
-        </Button>
-        
-        <Button 
-          variant="outline" 
-          onClick={handleSaveAnalysis}
-          disabled={isSaving || !data.estimatedProduction}
-        >
-          {isSaving ? (
-            <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="mr-1 h-4 w-4" />
-          )}
-          Salvar
-        </Button>
-      </div>
 
       {/* Botão de buscar footprints */}
       {data.coordinates && (

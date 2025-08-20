@@ -21,7 +21,7 @@ export function AddressSearch() {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { updateData, setIsLoading, setError, setSelectedAddress, setCurrentPolygon } = useAnalysis();
+  const { updateData, setIsLoading, setError, setSelectedAddress, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
 
   // Função para buscar sugestões de endereços
   const fetchSuggestions = async (query: string) => {
@@ -131,8 +131,18 @@ export function AddressSearch() {
     const lng = parseFloat(suggestion.lon);
     updateData({
       address: suggestion.display_name,
-      coordinates: [lng, lat] as [number, number]
+      coordinates: [lng, lat] as [number, number],
+      // Reset footprints when selecting new address
+      footprints: [],
+      usableArea: 0,
+      areaSource: 'manual' as const
     });
+    
+    // Reset footprint action state for new address
+    setHasFootprintFromAction(false);
+    
+    // Clear any existing polygon
+    setCurrentPolygon(null);
     
     // Don't automatically search for footprint - let user click button
   };
@@ -186,8 +196,18 @@ export function AddressSearch() {
           setSelectedAddress(result.display_name);
           updateData({
             address: result.display_name,
-            coordinates: [lng, lat] as [number, number]
+            coordinates: [lng, lat] as [number, number],
+            // Reset footprints when selecting new address
+            footprints: [],
+            usableArea: 0,
+            areaSource: 'manual' as const
           });
+          
+          // Reset footprint action state for new address
+          setHasFootprintFromAction(false);
+          
+          // Clear any existing polygon
+          setCurrentPolygon(null);
           
           // Don't automatically search for footprint - let user click button
         } else {
