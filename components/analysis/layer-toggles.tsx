@@ -22,7 +22,7 @@ export function LayerToggles({
   onReliefToggle
 }: LayerTogglesProps) {
   return (
-    <div className="bg-background rounded-lg shadow-lg border p-3 space-y-3">
+    <div className="bg-background rounded-lg shadow-lg border p-3 space-y-3 w-60">
       <div className="flex items-center space-x-2">
         <Layers className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Camadas</span>
@@ -61,22 +61,26 @@ export function LayerToggles({
           size="sm"
           variant={showShadow ? "default" : "outline"}
           onClick={() => onShadowToggle(!showShadow)}
-          className="w-full justify-start"
+          className="w-full justify-between"
         >
-          <Eye className="h-3 w-3 mr-2" />
-          Sombra (NDVI)
-          {showShadow && <Badge variant="secondary" className="ml-auto text-xs">ON</Badge>}
+          <div className="flex items-center">
+            <Eye className="h-3 w-3 mr-2" />
+            <span className="truncate">Sombra (NDVI)</span>
+          </div>
+          {showShadow && <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">ON</Badge>}
         </Button>
         
         <Button
           size="sm"
           variant={showRelief ? "default" : "outline"}
           onClick={() => onReliefToggle(!showRelief)}
-          className="w-full justify-start"
+          className="w-full justify-between"
         >
-          <Mountain className="h-3 w-3 mr-2" />
-          Relevo (DEM)
-          {showRelief && <Badge variant="secondary" className="ml-auto text-xs">ON</Badge>}
+          <div className="flex items-center">
+            <Mountain className="h-3 w-3 mr-2" />
+            <span className="truncate">Relevo (DEM)</span>
+          </div>
+          {showRelief && <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">ON</Badge>}
         </Button>
       </div>
     </div>
