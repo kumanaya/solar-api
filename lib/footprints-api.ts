@@ -39,6 +39,27 @@ export async function getFootprints(lat: number, lng: number): Promise<Footprint
 
     if (error) {
       console.error('Footprints edge function error:', error);
+      
+      // Check if it's a 404 with footprint not found data
+      if (error.message && error.message.includes('404') && data) {
+        // Try to parse the error response for FOOTPRINT_NOT_FOUND
+        try {
+          let parsedError = data;
+          if (typeof data === 'string') {
+            parsedError = JSON.parse(data);
+          }
+          if (parsedError.errorCode === 'FOOTPRINT_NOT_FOUND') {
+            return {
+              success: false,
+              error: parsedError.error,
+              errorCode: parsedError.errorCode
+            };
+          }
+        } catch (parseError) {
+          console.error('Failed to parse 404 error response:', parseError);
+        }
+      }
+      
       const apiError = createApiError(ERROR_CODES.EDGE_FUNCTION_ERROR);
       return {
         success: false,
@@ -66,6 +87,14 @@ export async function getFootprints(lat: number, lng: number): Promise<Footprint
         console.log('Parsed footprints data successfully:', parsedData);
         if (!parsedData.success) {
           const errorCode = parsedData.errorCode || detectErrorCode(parsedData.error || '');
+          // Preserve original error message for FOOTPRINT_NOT_FOUND
+          if (errorCode === ERROR_CODES.FOOTPRINT_NOT_FOUND) {
+            return {
+              success: false,
+              error: parsedData.error,
+              errorCode: errorCode
+            };
+          }
           const apiError = createApiError(errorCode, parsedData.error);
           return {
             success: false,
@@ -88,6 +117,14 @@ export async function getFootprints(lat: number, lng: number): Promise<Footprint
 
     if (!data.success) {
       const errorCode = data.errorCode || detectErrorCode(data.error || '');
+      // Preserve original error message for FOOTPRINT_NOT_FOUND
+      if (errorCode === ERROR_CODES.FOOTPRINT_NOT_FOUND) {
+        return {
+          success: false,
+          error: data.error,
+          errorCode: errorCode
+        };
+      }
       const apiError = createApiError(errorCode, data.error);
       return {
         success: false,

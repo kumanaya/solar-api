@@ -30,6 +30,7 @@ export function ActionButtons() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSearchingFootprints, setIsSearchingFootprints] = useState(false);
+  const [footprintNotFoundMessage, setFootprintNotFoundMessage] = useState<string | null>(null);
 
   const handleOpenPDFModal = () => {
     setIsPDFModalOpen(true);
@@ -57,6 +58,7 @@ export function ActionButtons() {
 
     setIsSearchingFootprints(true);
     setError(null);
+    setFootprintNotFoundMessage(null);
 
     try {
       const [lng, lat] = data.coordinates;
@@ -80,15 +82,23 @@ export function ActionButtons() {
           // Mark that footprint came from manual action
           setHasFootprintFromAction(true);
           
+          // Clear any previous footprint not found message
+          setFootprintNotFoundMessage(null);
+          
           const locationSource = data.address.includes(',') && data.address.includes('.') ? 'pin' : 'endereço';
           alert(`Footprint encontrado usando ${locationSource}! Área: ${footprintData.area}m² (${footprintData.source})`);
         } else {
-          setError('Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
+          setFootprintNotFoundMessage('Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
         }
       } else {
-        // Usar sistema de códigos de erro padronizado
-        const errorInfo = handleError(result.error || 'Erro ao buscar footprints', result.errorCode);
-        setError(errorInfo.userMessage);
+        // Tratar especificamente o erro FOOTPRINT_NOT_FOUND
+        if (result.errorCode === 'FOOTPRINT_NOT_FOUND') {
+          setFootprintNotFoundMessage(result.error || 'Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
+        } else {
+          // Usar sistema de códigos de erro padronizado para outros erros
+          const errorInfo = handleError(result.error || 'Erro ao buscar footprints', result.errorCode);
+          setError(errorInfo.userMessage);
+        }
       }
     } catch (error) {
       console.error('Footprint search error:', error);
@@ -228,6 +238,11 @@ export function ActionButtons() {
           {!canAnalyze && (
             <p className="text-amber-600">
               Selecione um endereço para executar análise
+            </p>
+          )}
+          {footprintNotFoundMessage && (
+            <p className="text-orange-600">
+              {footprintNotFoundMessage}
             </p>
           )}
           {data.footprints.length > 0 && hasFootprintFromAction && (
