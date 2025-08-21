@@ -1,20 +1,14 @@
 import { createClient } from "@/lib/supabase/client";
 import { ERROR_CODES, createApiError, detectErrorCode } from "@/lib/shared/error-codes";
 
-interface AnalysisRequest {
-  address: string;
-  polygon?: {
-    type: "Polygon";
-    coordinates: number[][][]; // [lng,lat]
-    source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
-  };
-  usableAreaOverride?: number; // m²
+interface GetAnalysisRequest {
+  id: string;
 }
 
-interface AnalysisResponse {
+interface GetAnalysisResponse {
   success: boolean;
   data?: {
-    id?: string;
+    id: string;
     address: string;
     coordinates: {
       lat: number;
@@ -44,47 +38,26 @@ interface AnalysisResponse {
     usageFactor: number;
     googleSolarData?: object;
     technicalNote?: string;
-    createdAt?: string;
+    createdAt: string;
   };
   error?: string;
   errorCode?: string;
 }
 
-export async function analyzeAddress(
-  address: string, 
-  polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" },
-  usableAreaOverride?: number
-): Promise<AnalysisResponse> {
+export async function getAnalysisById(id: string): Promise<GetAnalysisResponse> {
   try {
     const supabase = createClient();
     
-    // Call the edge function (Supabase client handles auth automatically)
-    console.log('Calling edge function with address:', address);
+    console.log('Calling get-analysis edge function with ID:', id);
     
-    const requestBody: AnalysisRequest = { address };
-    
-    // Add polygon if provided
-    if (polygon) {
-      requestBody.polygon = polygon;
-      console.log('Including polygon in analysis request:', polygon);
-    }
-    
-    // Add usable area override if provided
-    if (usableAreaOverride && usableAreaOverride > 0) {
-      requestBody.usableAreaOverride = usableAreaOverride;
-      console.log('Including usable area override in analysis request:', usableAreaOverride);
-    }
-    
-    const { data, error } = await supabase.functions.invoke('analyze', {
-      body: requestBody
+    const { data, error } = await supabase.functions.invoke('get-analysis', {
+      body: { id } as GetAnalysisRequest
     });
 
-    console.log('Edge function response:', { data, error });
-    console.log('Data type:', typeof data);
-    console.log('Data content:', data);
+    console.log('Get-analysis edge function response:', { data, error });
 
     if (error) {
-      console.error('Edge function error:', error);
+      console.error('Get-analysis edge function error:', error);
       const apiError = createApiError(ERROR_CODES.EDGE_FUNCTION_ERROR);
       return {
         success: false,
@@ -95,7 +68,7 @@ export async function analyzeAddress(
 
     // Handle empty or malformed response
     if (!data) {
-      console.error('Empty response from edge function');
+      console.error('Empty response from get-analysis edge function');
       const apiError = createApiError(ERROR_CODES.EMPTY_RESPONSE);
       return {
         success: false,
@@ -119,7 +92,7 @@ export async function analyzeAddress(
             errorCode: apiError.code
           };
         }
-        return parsedData as AnalysisResponse;
+        return parsedData as GetAnalysisResponse;
       } catch (parseError) {
         console.error('JSON parse error:', parseError);
         console.error('Failed to parse string:', data);
@@ -142,10 +115,10 @@ export async function analyzeAddress(
       };
     }
 
-    return data as AnalysisResponse;
+    return data as GetAnalysisResponse;
     
   } catch (error) {
-    console.error('Analysis API error:', error);
+    console.error('Get Analysis API error:', error);
     
     let errorCode = ERROR_CODES.UNKNOWN_ERROR;
     
@@ -166,8 +139,8 @@ export async function analyzeAddress(
   }
 }
 
-// Function to transform API response to frontend format
-export function transformAnalysisData(apiData: AnalysisResponse['data']) {
+// Helper function to transform API response to frontend format
+export function transformGetAnalysisData(apiData: GetAnalysisResponse['data']) {
   if (!apiData) return null;
 
   return {
@@ -196,6 +169,7 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
       source: fp.source
     })),
     usageFactor: apiData.usageFactor,
+    googleSolarData: apiData.googleSolarData,
     technicalNote: apiData.technicalNote,
     createdAt: apiData.createdAt
   };

@@ -14,6 +14,7 @@ export interface Footprint {
 }
 
 export interface AnalysisData {
+  id?: string;
   address: string;
   coordinates: [number, number] | null;
   coverage: {
@@ -32,6 +33,8 @@ export interface AnalysisData {
   reasons: string[];
   footprints: Footprint[];
   usageFactor: number;
+  technicalNote?: string;
+  createdAt?: string;
 }
 
 interface AnalysisContextType {

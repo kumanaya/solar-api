@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RecentAnalyses } from "@/components/dashboard/recent-analyses";
+import { DashboardAnalysesWrapper } from "@/components/dashboard/dashboard-analyses-wrapper";
 import { NewAnalysisCard } from "@/components/dashboard/new-analysis-card";
 import { ShortcutCards } from "@/components/dashboard/shortcut-cards";
 import { CalendarDays, Users, Activity, TrendingUp } from "lucide-react";
@@ -167,10 +167,8 @@ export default async function DashboardPage() {
         <ShortcutCards />
       </div>
 
-      {/* Nova seção para análises recentes */}
-      <div className="grid gap-4 grid-cols-1 lg:grid-cols-7">
-        <RecentAnalyses />
-      </div>
+      {/* Lista de análises salvas */}
+      <DashboardAnalysesWrapper />
     </div>
   );
 }

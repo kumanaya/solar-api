@@ -32,6 +32,7 @@ const AnalyzeRequestSchema = z.object({
 });
 
 const AnalysisSchema = z.object({
+  id: z.string().uuid().optional(), // Analysis ID from database
   address: z.string(),
   coordinates: z.object({ lat: z.number(), lng: z.number() }),
   coverage: z.object({
@@ -58,6 +59,7 @@ const AnalysisSchema = z.object({
   })),
   googleSolarData: z.any().optional(),
   technicalNote: z.string().optional(), // Inclui nota técnica automática
+  createdAt: z.string().optional(), // ISO timestamp
 });
 
 /* ========= TIPOS GOOGLE SOLAR ========= */
@@ -485,6 +487,55 @@ async function processFallbackAnalysis(opts: {
   });
 }
 
+/* ========= DATABASE ========= */
+
+async function saveAnalysisToDatabase(analysisData: any, userId: string, supabase: any) {
+  try {
+    console.log('Attempting to save analysis for user:', userId);
+    console.log('Analysis data keys:', Object.keys(analysisData));
+    
+    const insertData = {
+      user_id: userId,
+      address: analysisData.address,
+      coordinates: analysisData.coordinates,
+      coverage: analysisData.coverage,
+      confidence: analysisData.confidence,
+      usable_area: analysisData.usableArea,
+      area_source: analysisData.areaSource,
+      annual_irradiation: analysisData.annualIrradiation,
+      irradiation_source: analysisData.irradiationSource,
+      shading_index: analysisData.shadingIndex,
+      shading_loss: analysisData.shadingLoss,
+      estimated_production: analysisData.estimatedProduction,
+      verdict: analysisData.verdict,
+      reasons: analysisData.reasons,
+      usage_factor: analysisData.usageFactor,
+      footprints: analysisData.footprints,
+      google_solar_data: analysisData.googleSolarData,
+      technical_note: analysisData.technicalNote
+    };
+    
+    console.log('Insert data prepared:', JSON.stringify(insertData, null, 2));
+
+    const { data, error } = await supabase
+      .from('analyses')
+      .insert(insertData)
+      .select('id, created_at')
+      .single();
+
+    if (error) {
+      console.error('Database save error:', JSON.stringify(error, null, 2));
+      return null;
+    }
+
+    console.log('Analysis saved successfully:', data);
+    return { id: data.id, createdAt: data.created_at };
+  } catch (error) {
+    console.error('Database save exception:', error);
+    return null;
+  }
+}
+
 /* ========= AUTH ========= */
 
 async function verifyAuth(req: Request) {
@@ -565,6 +616,28 @@ Deno.serve(async (req: Request) => {
         polygon: input.polygon as any,
         usableAreaOverride: input.usableAreaOverride,
       });
+    }
+
+    // 3) Save to database with authenticated user context
+    const authHeader = req.headers.get("Authorization");
+    const token = authHeader?.replace("Bearer ", "");
+    
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    
+    // Set the session with the user's JWT token
+    if (token) {
+      await supabase.auth.setSession({
+        access_token: token,
+        refresh_token: '' // Not needed for this operation
+      });
+    }
+    
+    const savedResult = await saveAnalysisToDatabase(analysis, auth.user.id, supabase);
+    
+    // Add database info to response
+    if (savedResult) {
+      analysis.id = savedResult.id;
+      analysis.createdAt = savedResult.createdAt;
     }
 
     return new Response(JSON.stringify({ success: true, data: analysis }), {

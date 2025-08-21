@@ -190,6 +190,11 @@ export function ActionButtons() {
       
       console.log('Analysis completed successfully:', transformedData);
       
+      // Show analysis ID if saved to database
+      if (transformedData.id) {
+        console.log('Analysis saved to database with ID:', transformedData.id);
+      }
+      
       // Preserve current coordinates (where user placed the pin)
       const currentCoordinates = data.coordinates;
       updateData({
