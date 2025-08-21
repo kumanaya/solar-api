@@ -33,7 +33,7 @@ export async function getUserAnalyses(
     console.log('Fetching user analyses:', { page, limit, sortBy, sortOrder });
     
     // Query analyses with pagination and sorting
-    const query = supabase
+    const { data, error, count } = await supabase
       .from('analyses')
       .select(`
         id,
@@ -44,11 +44,9 @@ export async function getUserAnalyses(
         created_at,
         confidence,
         area_source
-      `)
+      `, { count: 'exact' })
       .order(sortBy, { ascending: sortOrder === 'asc' })
       .range(offset, offset + limit - 1);
-
-    const { data, error, count } = await query;
 
     if (error) {
       console.error('Database query error:', error);

@@ -174,13 +174,16 @@ export function TechnicalPanel() {
                 <span className="text-2xl font-bold">{currentVersion.annualIrradiation}</span>
                 <div className="text-right">
                   <p className="text-xs text-muted-foreground">kWh/m²/ano</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {currentVersion.sources.map((source) => (
-                      <Badge key={source} variant="outline" className="text-xs">
-                        {source}
-                      </Badge>
-                    ))}
-                  </div>
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Fonte principal:</span>
+                <div className="flex flex-wrap gap-1">
+                  {currentVersion.sources.map((source) => (
+                    <Badge key={source} variant="outline" className="text-xs">
+                      {source}
+                    </Badge>
+                  ))}
                 </div>
               </div>
               <div className="space-y-2 text-sm text-muted-foreground">

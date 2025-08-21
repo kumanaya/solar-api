@@ -11,10 +11,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ThemeSwitcher } from "@/components/theme-switcher";
-import { CreditsIndicator } from "@/components/dashboard/credits-indicator";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-import { Bell, Settings, User as UserIcon, LogOut } from "lucide-react";
+import { User as UserIcon, LogOut } from "lucide-react";
 
 interface DashboardHeaderProps {
   user: User;
@@ -34,23 +33,11 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
       <div className="flex h-14 items-center justify-between px-4 md:px-6">
         <div className="flex items-center">
           <a className="ml-8 md:ml-0 flex items-center space-x-2" href="/dashboard">
-            <span className="font-bold text-lg">Solar API</span>
+            <span className="font-bold text-lg">Lumionfy</span>
           </a>
         </div>
         
         <nav className="flex items-center space-x-3">
-          <CreditsIndicator 
-            currentCredits={12} 
-            maxCredits={50} 
-            planType="basic" 
-          />
-          
-          <div className="h-6 w-px bg-border hidden md:block" />
-          
-          <Button variant="ghost" size="icon">
-            <Bell className="h-4 w-4" />
-          </Button>
-          
           <ThemeSwitcher />
           
           <DropdownMenu>
@@ -70,11 +57,6 @@ export function DashboardHeader({ user }: DashboardHeaderProps) {
                   </p>
                 </div>
               </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Settings className="mr-2 h-4 w-4" />
-                <span>Configurações</span>
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />

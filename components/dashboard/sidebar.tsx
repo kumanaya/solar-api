@@ -7,11 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import {
   Home,
-  Users,
-  Settings,
   BarChart3,
-  FileText,
-  Database,
   Menu,
   X,
 } from "lucide-react";
@@ -26,31 +22,6 @@ const sidebarItems = [
     title: "Nova Análise",
     href: "/dashboard/analysis",
     icon: BarChart3,
-  },
-  {
-    title: "Usuários",
-    href: "/dashboard/users",
-    icon: Users,
-  },
-  {
-    title: "Relatórios",
-    href: "/dashboard/reports",
-    icon: FileText,
-  },
-  {
-    title: "Documentos",
-    href: "/dashboard/documents",
-    icon: FileText,
-  },
-  {
-    title: "Base de Dados",
-    href: "/dashboard/database",
-    icon: Database,
-  },
-  {
-    title: "Configurações",
-    href: "/dashboard/settings",
-    icon: Settings,
   },
 ];
 
