@@ -26,6 +26,7 @@ const AnalyzeRequestSchema = z.object({
     .object({
       type: z.literal("Polygon"),
       coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))), // [lng,lat]
+      source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
     })
     .optional(),
 });
@@ -53,6 +54,7 @@ const AnalysisSchema = z.object({
     coordinates: z.array(z.tuple([z.number(), z.number()])),
     area: z.number(),
     isActive: z.boolean(),
+    source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
   })),
   googleSolarData: z.any().optional(),
   technicalNote: z.string().optional(), // Inclui nota técnica automática
@@ -270,11 +272,25 @@ function processGoogleSolarData(
   address: string,
   lat: number,
   lng: number,
+  polygon?: { type: "Polygon"; coordinates: number[][][] },
+  usableAreaOverride?: number,
 ) {
   const sp = solar.solarPotential!;
   const wholeArea = sp.wholeRoofStats?.areaMeters2 ?? 0;
-  const usableArea = Math.floor(sp.maxArrayAreaMeters2 ?? wholeArea * 0.70);
+  let usableArea = Math.floor(sp.maxArrayAreaMeters2 ?? wholeArea * 0.70);
+  let areaSource: "google" | "manual" | "footprint" = "google";
   const usageFactor = 0.80;
+
+  // Use polygon or override area if provided
+  if (usableAreaOverride && usableAreaOverride > 0) {
+    usableArea = usableAreaOverride;
+    areaSource = "manual";
+  } else if (polygon?.coordinates?.length) {
+    const ring = polygon.coordinates[0] as [number, number][];
+    const polyArea = polygonAreaM2(ring);
+    usableArea = Math.max(0, polyArea * usageFactor);
+    areaSource = "footprint";
+  }
 
   // Shade index pela razão mediana/max das horas de sol
   const q = sp.wholeRoofStats?.sunshineQuantiles ?? [];
@@ -284,18 +300,19 @@ function processGoogleSolarData(
   const shadingLoss = Math.round(0.2 * shadeIndex * 100);
 
   let estimatedProduction = 0;
-  if (sp.solarPanelConfigs?.length) {
+  if (sp.solarPanelConfigs?.length && areaSource === "google") {
+    // Use Google's panel configs only if using Google's area calculation
     const best = sp.solarPanelConfigs.reduce((a, b) =>
       (b.yearlyEnergyDcKwh ?? 0) > (a.yearlyEnergyDcKwh ?? 0) ? b : a,
     );
     estimatedProduction = Math.floor((best.yearlyEnergyDcKwh ?? 0) * (1 - 0.2 * shadeIndex));
   } else {
-    // Proxy de GHI (quando não há configs)
+    // Use GHI calculation for manual/polygon areas
     const proxyGHI = (sp.maxSunshineHoursPerYear ?? 1500);
     estimatedProduction = Math.floor(
       estimateAnnualKwhByGHI({
         ghi_kwh_m2_year: proxyGHI,
-        usable_area_m2: usableArea * usageFactor,
+        usable_area_m2: usableArea,
         shade_index: shadeIndex,
       }),
     );
@@ -311,25 +328,45 @@ function processGoogleSolarData(
       : 15;
 
   const cls = classifyVerdict({
-    usable_area_m2: usableArea * usageFactor,
+    usable_area_m2: areaSource === "google" ? usableArea * usageFactor : usableArea,
     shade_index: shadeIndex,
     azimuth_deg: avgAz,
     tilt_deg: avgTilt,
   });
 
+  // Build footprints array if polygon provided
+  const footprints = [];
+  if (polygon?.coordinates?.length) {
+    const ring = polygon.coordinates[0] as [number, number][];
+    const polygonSource = polygon.source || "user-drawn";
+    footprints.push({
+      id: polygonSource === "microsoft-footprint" ? "microsoft-footprint-polygon" : "user-drawn-polygon",
+      coordinates: ring,
+      area: Math.round(polygonAreaM2(ring)),
+      isActive: true,
+      source: polygonSource,
+    });
+  }
+
   // Nota técnica padrão para laudo
-  const technicalNote =
+  let technicalNote =
     "Nota técnica: Todos os cálculos deste laudo utilizam dados reais das fontes oficiais Google Solar API, PVGIS e NASA POWER. " +
     "A área calculada por polígono pode ter variação de até ±5% conforme latitude, método de projeção e resolução dos dados. " +
     "Recomenda-se validação in loco para projetos críticos.";
+  
+  // Add Microsoft footprint information if applicable
+  if (polygon?.source === "microsoft-footprint") {
+    technicalNote += " Footprint fornecido por Microsoft Building Footprints dataset, " +
+      "baseado em imagens de satélite e algoritmos de machine learning para detecção automática de estruturas.";
+  }
 
   return AnalysisSchema.parse({
     address,
     coordinates: { lat, lng },
     coverage: { google: true },
     confidence: "Alta",
-    usableArea: Math.max(0, Math.round(usableArea * usageFactor)),
-    areaSource: "google",
+    usableArea: Math.max(0, Math.round(areaSource === "google" ? usableArea * usageFactor : usableArea)),
+    areaSource,
     annualIrradiation: Math.round(sp.maxSunshineHoursPerYear ?? 0),
     irradiationSource: "Google Solar API",
     shadingIndex: Number(shadeIndex.toFixed(2)),
@@ -338,7 +375,7 @@ function processGoogleSolarData(
     verdict: cls.verdict,
     reasons: cls.reasons,
     usageFactor,
-    footprints: [],
+    footprints,
     googleSolarData: solar,
     technicalNote,
   });
@@ -408,17 +445,25 @@ async function processFallbackAnalysis(opts: {
   const footprints = [];
   if (polygon?.coordinates?.length) {
     const ring = polygon.coordinates[0] as [number, number][];
+    const polygonSource = polygon.source || "user-drawn";
     footprints.push({
-      id: "manual-polygon",
+      id: polygonSource === "microsoft-footprint" ? "microsoft-footprint-polygon" : "manual-polygon",
       coordinates: ring,
       area: Math.round(polygonAreaM2(ring)),
       isActive: true,
+      source: polygonSource,
     });
   }
 
-  const technicalNote =
+  let technicalNote =
     "Nota técnica: Todos os cálculos deste laudo utilizam dados reais das fontes públicas PVGIS e NASA POWER. " +
     "A área do polígono é aproximada e pode apresentar margem de erro de até ±5%. Recomenda-se validação in loco para projetos de grande escala.";
+  
+  // Add Microsoft footprint information if applicable
+  if (polygon?.source === "microsoft-footprint") {
+    technicalNote += " Footprint fornecido por Microsoft Building Footprints dataset, " +
+      "baseado em imagens de satélite e algoritmos de machine learning para detecção automática de estruturas.";
+  }
 
   return AnalysisSchema.parse({
     address,
@@ -504,7 +549,14 @@ Deno.serve(async (req: Request) => {
     let analysis;
     const google = await getGoogleSolarData(lat, lng).catch(() => null);
     if (google?.solarPotential) {
-      analysis = processGoogleSolarData(google, formatted, lat, lng);
+      analysis = processGoogleSolarData(
+        google,
+        formatted,
+        lat,
+        lng,
+        input.polygon as any,
+        input.usableAreaOverride,
+      );
     } else {
       analysis = await processFallbackAnalysis({
         lat,

@@ -125,8 +125,42 @@ export function ActionButtons() {
       console.log(`Starting analysis for address: ${selectedAddress}`);
       console.log('Current data coordinates:', data.coordinates);
       
-      // Calculate usable area override from footprints if available
+      // Determine polygon source and usable area override
+      let polygonToSend = currentPolygon;
       let usableAreaOverride: number | undefined;
+      
+      // Ensure user-drawn polygons have the correct source
+      if (currentPolygon && !currentPolygon.source) {
+        polygonToSend = {
+          ...currentPolygon,
+          source: "user-drawn"
+        };
+      }
+      
+      // If we have footprints from automatic detection, convert to polygon format
+      if (data.footprints.length > 0 && !currentPolygon) {
+        const activeFootprint = data.footprints.find(fp => fp.isActive);
+        if (activeFootprint) {
+          // Determine source - check if it's from Microsoft footprints
+          let source: "user-drawn" | "microsoft-footprint" | "google-footprint" = "user-drawn";
+          if (activeFootprint.source) {
+            if (activeFootprint.source.toLowerCase().includes('microsoft')) {
+              source = "microsoft-footprint";
+            } else if (activeFootprint.source.toLowerCase().includes('google')) {
+              source = "google-footprint";
+            }
+          }
+          
+          polygonToSend = {
+            type: "Polygon" as const,
+            coordinates: [activeFootprint.coordinates],
+            source: source
+          };
+          console.log('Using footprint polygon for analysis:', polygonToSend);
+        }
+      }
+      
+      // Calculate usable area override for manual areas
       if (data.footprints.length > 0 && data.areaSource === 'footprint') {
         const totalArea = data.footprints.reduce((sum, fp) => sum + fp.area, 0);
         usableAreaOverride = Math.round(totalArea * data.usageFactor);
@@ -134,7 +168,7 @@ export function ActionButtons() {
       
       const result = await analyzeAddress(
         selectedAddress,
-        currentPolygon || undefined,
+        polygonToSend || undefined,
         usableAreaOverride
       );
       
@@ -176,8 +210,6 @@ export function ActionButtons() {
       setIsLoading(false);
     }
   };
-  
-  const hasFootprint = data.footprints.length > 0;
   const canAnalyze = selectedAddress;
 
   return (

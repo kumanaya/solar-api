@@ -6,6 +6,7 @@ interface AnalysisRequest {
   polygon?: {
     type: "Polygon";
     coordinates: number[][][]; // [lng,lat]
+    source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
   };
   usableAreaOverride?: number; // m²
 }
@@ -37,6 +38,7 @@ interface AnalysisResponse {
       coordinates: [number, number][];
       area: number;
       isActive: boolean;
+      source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
     }>;
     usageFactor: number;
     googleSolarData?: object;
@@ -47,7 +49,7 @@ interface AnalysisResponse {
 
 export async function analyzeAddress(
   address: string, 
-  polygon?: { type: "Polygon"; coordinates: number[][][] },
+  polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" },
   usableAreaOverride?: number
 ): Promise<AnalysisResponse> {
   try {
@@ -186,7 +188,8 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
       id: fp.id,
       coordinates: fp.coordinates,
       area: fp.area,
-      isActive: fp.isActive
+      isActive: fp.isActive,
+      source: fp.source
     })),
     usageFactor: apiData.usageFactor
   };

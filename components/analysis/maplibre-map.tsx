@@ -589,7 +589,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       // Set polygon for analysis API (coordinates are already in [lng,lat] format)
       setCurrentPolygon({
         type: "Polygon",
-        coordinates: [closedCoords]
+        coordinates: [closedCoords],
+        source: "user-drawn"
       });
       
       // Clear drawing visualization

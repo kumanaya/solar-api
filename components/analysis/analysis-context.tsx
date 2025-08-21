@@ -10,6 +10,7 @@ export interface Footprint {
   coordinates: [number, number][];
   area: number;
   isActive: boolean;
+  source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
 }
 
 export interface AnalysisData {
@@ -46,8 +47,8 @@ interface AnalysisContextType {
   setSelectedAddress: (address: string) => void;
   drawingMode: boolean;
   setDrawingMode: (drawing: boolean) => void;
-  currentPolygon: { type: "Polygon"; coordinates: number[][][] } | null;
-  setCurrentPolygon: (polygon: { type: "Polygon"; coordinates: number[][][] } | null) => void;
+  currentPolygon: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" } | null;
+  setCurrentPolygon: (polygon: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" } | null) => void;
   hasAnalysisResults: boolean;
   setHasAnalysisResults: (hasResults: boolean) => void;
   hasFootprintFromAction: boolean;
@@ -84,7 +85,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   const [hasCredits, setHasCredits] = useState(true);
   const [selectedAddress, setSelectedAddress] = useState("");
   const [drawingMode, setDrawingMode] = useState(false);
-  const [currentPolygon, setCurrentPolygon] = useState<{ type: "Polygon"; coordinates: number[][][] } | null>(null);
+  const [currentPolygon, setCurrentPolygon] = useState<{ type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" } | null>(null);
   const [hasAnalysisResults, setHasAnalysisResults] = useState(false);
   const [hasFootprintFromAction, setHasFootprintFromAction] = useState(false);
 
