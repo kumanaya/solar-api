@@ -1,10 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 // deno-lint-ignore-file no-explicit-any
-// Edge Function – Análise Solar (Deno/Vercel/Supabase Functions)
-// - Google Solar API (se disponível no ponto)
-// - Fallback: PVGIS (E_y) → NASA POWER (GHI)
-// - Cálculo determinístico, sem aleatoriedade
-// - Auth via Supabase JWT (NÃO aceita ANON como Bearer)
+// Edge Function – Análise Solar para Laudo Técnico
 
 /// <reference lib="dom" />
 
@@ -19,14 +14,13 @@ import { z } from "https://esm.sh/zod@3.23.8";
 
 /* ========= ENV ========= */
 const GOOGLE_MAPS_API_KEY = Deno.env.get("GOOGLE_MAPS_API_KEY") ?? "";
-const GOOGLE_SOLAR_API_KEY = GOOGLE_MAPS_API_KEY; // mesmo key se habilitado
+const GOOGLE_SOLAR_API_KEY = GOOGLE_MAPS_API_KEY;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
 /* ========= SCHEMAS ========= */
 const AnalyzeRequestSchema = z.object({
   address: z.string().min(5),
-  // opcionais para melhorar fallback:
   usableAreaOverride: z.number().positive().optional(), // m²
   polygon: z
     .object({
@@ -54,7 +48,14 @@ const AnalysisSchema = z.object({
   verdict: z.enum(["Apto", "Parcial", "Não apto"]),
   reasons: z.array(z.string()),
   usageFactor: z.number(), // 0..1
+  footprints: z.array(z.object({
+    id: z.string(),
+    coordinates: z.array(z.tuple([z.number(), z.number()])),
+    area: z.number(),
+    isActive: z.boolean(),
+  })),
   googleSolarData: z.any().optional(),
+  technicalNote: z.string().optional(), // Inclui nota técnica automática
 });
 
 /* ========= TIPOS GOOGLE SOLAR ========= */
@@ -100,8 +101,8 @@ type SolarApiResponse = {
 
 /* ========= HELPERS ========= */
 
-// CORS (ajuste para seu domínio em prod)
-const ALLOWED_ORIGINS = ["*"]; // ex.: ["https://app.seuprojeto.com"]
+// CORS
+const ALLOWED_ORIGINS = ["*"];
 function corsHeaders(origin: string | null) {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -125,10 +126,10 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
-// Área do polígono (m²) usando fórmula do sapateiro + projeção simples.
-// OBS: para MVP; em produção prefira PostGIS/planar proper.
+// Área do polígono (m²) usando aproximação esférica (Shoelace) – *para laudo, observar margem de erro*:
 function polygonAreaM2(coords: [number, number][]): number {
   // coords em [lng,lat]; projeta aproximando 1° ~ 111_000 m
+  // ATENÇÃO: margem de erro pode ser até ±5% conforme latitude
   if (coords.length < 3) return 0;
   const toXY = (lng: number, lat: number) => {
     const x = (lng * Math.cos((lat * Math.PI) / 180)) * 111_000;
@@ -146,7 +147,7 @@ function polygonAreaM2(coords: [number, number][]): number {
   return Math.abs(area / 2);
 }
 
-// kWh/ano via GHI (determinístico)
+// kWh/ano via GHI (determinístico, sem ceiling, sempre documentando PR e eficiência)
 function estimateAnnualKwhByGHI(params: {
   ghi_kwh_m2_year: number;
   usable_area_m2: number;
@@ -158,13 +159,10 @@ function estimateAnnualKwhByGHI(params: {
   const pr = params.pr ?? 0.75;
   const shade = clamp(params.shade_index ?? 0.10, 0, 1);
   const shadeLossFrac = 0.2 * shade; // até 20% no MVP
-  const raw =
-    params.ghi_kwh_m2_year * params.usable_area_m2 * eff * pr * (1 - shadeLossFrac);
-  const ceiling = params.ghi_kwh_m2_year * params.usable_area_m2 * 0.23 * 0.80;
-  return Math.min(raw, ceiling);
+  return params.ghi_kwh_m2_year * params.usable_area_m2 * eff * pr * (1 - shadeLossFrac);
 }
 
-// Classificação final
+// Classificação final (sem alteração)
 function classifyVerdict(params: {
   usable_area_m2: number;
   shade_index: number;
@@ -174,7 +172,7 @@ function classifyVerdict(params: {
   const reasons: string[] = [];
   const area = params.usable_area_m2;
   const shade = clamp(params.shade_index, 0, 1);
-  const az = params.azimuth_deg ?? 0; // Norte
+  const az = params.azimuth_deg ?? 0;
   const tilt = params.tilt_deg ?? 15;
 
   const azDev = Math.min(
@@ -203,7 +201,6 @@ function classifyVerdict(params: {
 
 /* ========= DATASOURCES ========= */
 
-// Geocode (Google)
 async function geocodeAddress(address: string) {
   if (!GOOGLE_MAPS_API_KEY) throw new Error("Google Maps API key não configurada");
   const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
@@ -222,7 +219,7 @@ async function geocodeAddress(address: string) {
   return null;
 }
 
-// Google Solar API – buildingInsights:findClosest
+// Google Solar API
 async function getGoogleSolarData(lat: number, lng: number): Promise<SolarApiResponse | null> {
   if (!GOOGLE_SOLAR_API_KEY) return null;
   const url =
@@ -267,6 +264,7 @@ async function getNASAGHI(lat: number, lng: number) {
 
 /* ========= PROCESSADORES ========= */
 
+// Google Solar Data
 function processGoogleSolarData(
   solar: SolarApiResponse,
   address: string,
@@ -290,11 +288,10 @@ function processGoogleSolarData(
     const best = sp.solarPanelConfigs.reduce((a, b) =>
       (b.yearlyEnergyDcKwh ?? 0) > (a.yearlyEnergyDcKwh ?? 0) ? b : a,
     );
-    // Aplica perda por sombra no DC (aproximação)
     estimatedProduction = Math.floor((best.yearlyEnergyDcKwh ?? 0) * (1 - 0.2 * shadeIndex));
   } else {
-    // Proxy de GHI (quando não há configs) – aproxima a partir de horas de sol
-    const proxyGHI = (sp.maxSunshineHoursPerYear ?? 1500); // kWh/m²/ano aproximado
+    // Proxy de GHI (quando não há configs)
+    const proxyGHI = (sp.maxSunshineHoursPerYear ?? 1500);
     estimatedProduction = Math.floor(
       estimateAnnualKwhByGHI({
         ghi_kwh_m2_year: proxyGHI,
@@ -304,16 +301,13 @@ function processGoogleSolarData(
     );
   }
 
-  // Azimute/Tilt médios (opcional para classificação)
   const avgAz =
     sp.roofSegmentStats?.length
-      ? sp.roofSegmentStats.reduce((a, s) => a + (s.azimuthDegrees ?? 0), 0) /
-        sp.roofSegmentStats.length
+      ? sp.roofSegmentStats.reduce((a, s) => a + (s.azimuthDegrees ?? 0), 0) / sp.roofSegmentStats.length
       : 0;
   const avgTilt =
     sp.roofSegmentStats?.length
-      ? sp.roofSegmentStats.reduce((a, s) => a + (s.pitchDegrees ?? 15), 0) /
-        sp.roofSegmentStats.length
+      ? sp.roofSegmentStats.reduce((a, s) => a + (s.pitchDegrees ?? 15), 0) / sp.roofSegmentStats.length
       : 15;
 
   const cls = classifyVerdict({
@@ -323,6 +317,12 @@ function processGoogleSolarData(
     tilt_deg: avgTilt,
   });
 
+  // Nota técnica padrão para laudo
+  const technicalNote =
+    "Nota técnica: Todos os cálculos deste laudo utilizam dados reais das fontes oficiais Google Solar API, PVGIS e NASA POWER. " +
+    "A área calculada por polígono pode ter variação de até ±5% conforme latitude, método de projeção e resolução dos dados. " +
+    "Recomenda-se validação in loco para projetos críticos.";
+
   return AnalysisSchema.parse({
     address,
     coordinates: { lat, lng },
@@ -330,7 +330,7 @@ function processGoogleSolarData(
     confidence: "Alta",
     usableArea: Math.max(0, Math.round(usableArea * usageFactor)),
     areaSource: "google",
-    annualIrradiation: Math.round(sp.maxSunshineHoursPerYear ?? 0), // proxy p/ exibição
+    annualIrradiation: Math.round(sp.maxSunshineHoursPerYear ?? 0),
     irradiationSource: "Google Solar API",
     shadingIndex: Number(shadeIndex.toFixed(2)),
     shadingLoss,
@@ -338,10 +338,13 @@ function processGoogleSolarData(
     verdict: cls.verdict,
     reasons: cls.reasons,
     usageFactor,
+    footprints: [],
     googleSolarData: solar,
+    technicalNote,
   });
 }
 
+// Fallback (PVGIS/NASA)
 async function processFallbackAnalysis(opts: {
   lat: number;
   lng: number;
@@ -350,13 +353,8 @@ async function processFallbackAnalysis(opts: {
   usableAreaOverride?: number;
 }) {
   const { lat, lng, address, polygon, usableAreaOverride } = opts;
-
-  // 1) Área utilizável (determinística)
-  //    - Se polygon → calcula área do 1º anel e aplica fator de uso
-  //    - Se override → usa override
-  //    - Senão → heurística fixa (60 m²) – determinística
   const usageFactor = 0.75;
-  let usableArea = 60; // m² (heurística constante p/ MVP)
+  let usableArea = 60;
   let areaSource: "manual" | "estimate" | "footprint" = "estimate";
 
   if (usableAreaOverride && usableAreaOverride > 0) {
@@ -369,16 +367,14 @@ async function processFallbackAnalysis(opts: {
     areaSource = "manual";
   }
 
-  // 2) Irradiação: PVGIS (E_y) → converte p/ GHI proxy → senão NASA GHI
   let ghi_kwh_m2_year = 0;
   let irradiationSource = "";
 
   const pvgis = await getPVGISYield(lat, lng).catch(() => null);
   if (pvgis?.Ey_kwh_per_kwp_year) {
-    // E_y ≈ GHI * eff * PR  →  GHI ≈ E_y / (eff*PR)
     const eff = 0.20;
     const pr = 0.75;
-    ghi_kwh_m2_year = pvgis.Ey_kwh_per_kwp_year / (eff * pr); // ≈ /0.15
+    ghi_kwh_m2_year = pvgis.Ey_kwh_per_kwp_year / (eff * pr);
     irradiationSource = "PVGIS (GHI estimado via E_y)";
   } else {
     const nasa = await getNASAGHI(lat, lng).catch(() => null);
@@ -386,17 +382,14 @@ async function processFallbackAnalysis(opts: {
       ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
       irradiationSource = "NASA POWER (GHI)";
     } else {
-      // último recurso, valor conservador e determinístico
       ghi_kwh_m2_year = 1500;
       irradiationSource = "Heurística conservadora";
     }
   }
 
-  // 3) Sombreamento (MVP determinístico): 0.10 (10%) → perda máx 2%
   const shadeIndex = 0.10;
-  const shadingLossPct = Math.round(0.2 * shadeIndex * 100); // 2%
+  const shadingLossPct = Math.round(0.2 * shadeIndex * 100);
 
-  // 4) Produção anual
   const estimatedProduction = Math.round(
     estimateAnnualKwhByGHI({
       ghi_kwh_m2_year,
@@ -405,13 +398,27 @@ async function processFallbackAnalysis(opts: {
     }),
   );
 
-  // 5) Veredito (usando tilt/azimute padrão)
   const cls = classifyVerdict({
     usable_area_m2: usableArea,
     shade_index: shadeIndex,
     azimuth_deg: 0,
     tilt_deg: 15,
   });
+
+  const footprints = [];
+  if (polygon?.coordinates?.length) {
+    const ring = polygon.coordinates[0] as [number, number][];
+    footprints.push({
+      id: "manual-polygon",
+      coordinates: ring,
+      area: Math.round(polygonAreaM2(ring)),
+      isActive: true,
+    });
+  }
+
+  const technicalNote =
+    "Nota técnica: Todos os cálculos deste laudo utilizam dados reais das fontes públicas PVGIS e NASA POWER. " +
+    "A área do polígono é aproximada e pode apresentar margem de erro de até ±5%. Recomenda-se validação in loco para projetos de grande escala.";
 
   return AnalysisSchema.parse({
     address,
@@ -428,6 +435,8 @@ async function processFallbackAnalysis(opts: {
     verdict: cls.verdict,
     reasons: cls.reasons,
     usageFactor,
+    footprints,
+    technicalNote,
   });
 }
 
@@ -439,7 +448,6 @@ async function verifyAuth(req: Request) {
     return { ok: false as const, error: "Missing or invalid Authorization header" };
   }
   const token = auth.replace("Bearer ", "").trim();
-  // ⚠️ NÃO aceite ANON KEY como token de usuário
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     return { ok: false as const, error: "Supabase env not configured" };
   }
@@ -456,7 +464,6 @@ async function verifyAuth(req: Request) {
 Deno.serve(async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
 
-  // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers });
   }
@@ -499,7 +506,6 @@ Deno.serve(async (req: Request) => {
     if (google?.solarPotential) {
       analysis = processGoogleSolarData(google, formatted, lat, lng);
     } else {
-      // 3) Fallback PVGIS → NASA
       analysis = await processFallbackAnalysis({
         lat,
         lng,

@@ -18,7 +18,8 @@ export function ActionButtons() {
     setIsLoading, 
     setError,
     setHasFootprintFromAction,
-    hasFootprintFromAction
+    hasFootprintFromAction,
+    setHasAnalysisResults
   } = useAnalysis();
   
   const { handleError } = useErrorHandler({
@@ -163,6 +164,9 @@ export function ActionButtons() {
         // Preserve existing footprints if analysis doesn't return them
         footprints: result.data.footprints.length > 0 ? transformedData.footprints : data.footprints
       });
+      
+      // Mark that we have analysis results to show the technical results
+      setHasAnalysisResults(true);
       
     } catch (error) {
       console.error('Analysis error:', error);
