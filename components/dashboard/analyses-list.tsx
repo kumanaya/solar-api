@@ -28,41 +28,10 @@ import {
   MapPin,
   Zap
 } from "lucide-react";
-import { getUserAnalyses, deleteAnalysis, getAnalysisById, type AnalysisSummary } from "@/lib/analyses-api";
+import { getUserAnalyses, deleteAnalysis, type AnalysisSummary } from "@/lib/analyses-api";
 import { useRouter } from "next/navigation";
 
-interface AnalysisData {
-  id: string;
-  address: string;
-  coordinates: [number, number];
-  coverage: { google: boolean; fallback?: string };
-  confidence: 'Alta' | 'Média' | 'Baixa';
-  usableArea: number;
-  areaSource: 'google' | 'estimate' | 'footprint' | 'manual';
-  annualIrradiation: number;
-  irradiationSource: string;
-  shadingIndex: number;
-  shadingLoss: number;
-  estimatedProduction: number;
-  verdict: 'Apto' | 'Parcial' | 'Não apto';
-  reasons: string[];
-  footprints: Array<{
-    id: string;
-    coordinates: [number, number][];
-    area: number;
-    isActive: boolean;
-    source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
-  }>;
-  usageFactor: number;
-  technicalNote?: string;
-  createdAt?: string;
-}
-
-interface AnalysesListProps {
-  onAnalysisSelect?: (analysis: AnalysisData) => void;
-}
-
-export function AnalysesList({ onAnalysisSelect }: AnalysesListProps) {
+export function AnalysesList() {
   const router = useRouter();
   const [analyses, setAnalyses] = useState<AnalysisSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,46 +87,9 @@ export function AnalysesList({ onAnalysisSelect }: AnalysesListProps) {
     }
   };
 
-  const handleViewAnalysis = async (id: string) => {
-    try {
-      const result = await getAnalysisById(id);
-      
-      if (result.success && result.data) {
-        // Transform to match expected format
-        const transformedData = {
-          id: result.data.id,
-          address: result.data.address,
-          coordinates: [result.data.coordinates.lng, result.data.coordinates.lat] as [number, number],
-          coverage: result.data.coverage,
-          confidence: result.data.confidence,
-          usableArea: result.data.usableArea,
-          areaSource: result.data.areaSource,
-          annualIrradiation: result.data.annualIrradiation,
-          irradiationSource: result.data.irradiationSource,
-          shadingIndex: result.data.shadingIndex,
-          shadingLoss: result.data.shadingLoss,
-          estimatedProduction: result.data.estimatedProduction,
-          verdict: result.data.verdict,
-          reasons: result.data.reasons,
-          footprints: result.data.footprints,
-          usageFactor: result.data.usageFactor,
-          technicalNote: result.data.technicalNote,
-          createdAt: result.data.createdAt
-        };
-        
-        if (onAnalysisSelect) {
-          onAnalysisSelect(transformedData);
-        }
-        
-        // Navigate to analysis page
-        router.push('/dashboard/analysis');
-      } else {
-        setError(result.error || 'Erro ao carregar análise');
-      }
-    } catch (error) {
-      console.error('Error loading analysis:', error);
-      setError('Erro ao carregar análise');
-    }
+  const handleViewAnalysis = (id: string) => {
+    // Navigate directly to analysis detail page
+    router.push(`/dashboard/analysis/${id}`);
   };
 
   const handleDeleteAnalysis = async (id: string, address: string) => {

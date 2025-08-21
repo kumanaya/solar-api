@@ -68,9 +68,16 @@ Required for edge function:
 - `SUPABASE_URL` - Supabase project URL
 - `SUPABASE_ANON_KEY` - Supabase anonymous key
 
+Required for frontend:
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY` - Supabase anonymous key
+- `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` - MapLibre/Mapbox token (optional, falls back to OpenStreetMap)
+
 ### Database Schema
 
-The app uses Supabase PostgreSQL but migrations aren't included in this analysis. Check `supabase/migrations/` for current schema.
+The app uses Supabase PostgreSQL with migrations in `supabase/migrations/`:
+- Building footprints table for Microsoft building data
+- Solar analyses table for storing analysis results
 
 ### Key Files Structure
 

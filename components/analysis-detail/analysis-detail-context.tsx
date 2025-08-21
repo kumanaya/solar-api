@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { getAnalysisById, transformGetAnalysisData } from "@/lib/get-analysis-api";
+import { analyzeAddress } from "@/lib/analysis-api";
 
 export interface AnalysisVersion {
   id: string;
@@ -16,6 +18,8 @@ export interface AnalysisVersion {
     tiltEstimated?: number;
   };
   variationFromPrevious?: number;
+  shadingIndex?: number;
+  shadingLoss?: number;
 }
 
 export interface DetailedAnalysis {
@@ -30,6 +34,13 @@ export interface DetailedAnalysis {
     coordinates: [number, number][];
     area: number;
   };
+  footprints: Array<{
+    id: string;
+    coordinates: [number, number][];
+    area: number;
+    isActive: boolean;
+    source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
+  }>;
   sources: {
     pvgis: boolean;
     nasa: boolean;
@@ -37,6 +48,8 @@ export interface DetailedAnalysis {
     google: boolean;
   };
   reprocessCount: number;
+  technicalNote?: string;
+  reasons: string[];
 }
 
 interface AnalysisDetailContextType {
@@ -52,61 +65,62 @@ interface AnalysisDetailContextType {
 
 const AnalysisDetailContext = createContext<AnalysisDetailContextType | undefined>(undefined);
 
-// Mock data generator
-const generateMockAnalysis = (id: string): DetailedAnalysis => {
-  const baseDate = new Date();
-  const createdAt = new Date(baseDate.getTime() - Math.random() * 30 * 24 * 60 * 60 * 1000);
-  
-  const versions: AnalysisVersion[] = [];
-  const versionCount = Math.floor(Math.random() * 3) + 1;
-  
-  for (let i = 0; i < versionCount; i++) {
-    const versionDate = new Date(createdAt.getTime() + i * 7 * 24 * 60 * 60 * 1000);
-    const area = 120 + Math.random() * 80;
-    const irradiation = 1400 + Math.random() * 400;
-    const production = area * irradiation * 0.15;
-    
-    versions.push({
-      id: `${id}-v${i + 1}`,
-      date: versionDate.toISOString(),
-      confidence: ["Alta", "Média", "Baixa"][Math.floor(Math.random() * 3)] as "Alta" | "Média" | "Baixa",
-      usableArea: Math.floor(area),
-      annualIrradiation: Math.floor(irradiation),
-      estimatedProduction: Math.floor(production),
-      verdict: ["Apto", "Parcial", "Não apto"][Math.floor(Math.random() * 3)] as "Apto" | "Parcial" | "Não apto",
-      sources: ["PVGIS", "NASA SRTM", Math.random() > 0.5 ? "Solcast" : "Google"].filter(Boolean),
-      parameters: {
-        usageFactor: 0.7 + Math.random() * 0.2,
-        tiltEstimated: Math.random() > 0.5 ? Math.floor(Math.random() * 20 + 10) : undefined
-      },
-      variationFromPrevious: i > 0 ? (Math.random() - 0.5) * 20 : undefined
-    });
-  }
+// Transform API data to DetailedAnalysis format
+const transformApiDataToDetailedAnalysis = (apiData: ReturnType<typeof transformGetAnalysisData>): DetailedAnalysis => {
+  if (!apiData) throw new Error("No analysis data received");
+
+  // Create current version from API data
+  const currentVersion: AnalysisVersion = {
+    id: `${apiData.id}-v1`,
+    date: apiData.createdAt,
+    confidence: apiData.confidence,
+    usableArea: apiData.usableArea,
+    annualIrradiation: apiData.annualIrradiation,
+    estimatedProduction: apiData.estimatedProduction,
+    verdict: apiData.verdict,
+    sources: [apiData.irradiationSource],
+    parameters: {
+      usageFactor: apiData.usageFactor,
+      tiltEstimated: undefined // Not available in current API
+    },
+    variationFromPrevious: undefined,
+    shadingIndex: apiData.shadingIndex,
+    shadingLoss: apiData.shadingLoss
+  };
+
+  // For now, history contains only the current version
+  // TODO: Implement version history in the database
+  const history = [currentVersion];
+
+  // Get polygon from active footprint or create fallback
+  const activeFootprint = apiData.footprints.find((fp) => fp.isActive);
+  const polygon = activeFootprint ? {
+    coordinates: activeFootprint.coordinates,
+    area: activeFootprint.area
+  } : {
+    coordinates: [], // Fallback for no footprint
+    area: apiData.usableArea
+  };
 
   return {
-    id,
-    address: `Rua Exemplo ${id}, São Paulo - SP`,
-    coordinates: [-23.550520 + Math.random() * 0.01, -46.633308 + Math.random() * 0.01],
-    createdAt: createdAt.toISOString(),
-    lastUpdated: versions[versions.length - 1].date,
-    currentVersion: versions[versions.length - 1],
-    history: versions,
-    polygon: {
-      coordinates: [
-        [-23.550520, -46.633308],
-        [-23.550530, -46.633290],
-        [-23.550540, -46.633310],
-        [-23.550530, -46.633320]
-      ],
-      area: Math.floor(150 + Math.random() * 100)
-    },
+    id: apiData.id,
+    address: apiData.address,
+    coordinates: [apiData.coordinates[1], apiData.coordinates[0]], // lat, lng
+    createdAt: apiData.createdAt,
+    lastUpdated: apiData.createdAt,
+    currentVersion,
+    history,
+    polygon,
+    footprints: apiData.footprints,
     sources: {
-      pvgis: true,
-      nasa: true,
-      solcast: Math.random() > 0.3,
-      google: Math.random() > 0.5
+      pvgis: apiData.irradiationSource.includes('PVGIS'),
+      nasa: apiData.irradiationSource.includes('NASA'),
+      solcast: apiData.irradiationSource.includes('Solcast'),
+      google: apiData.coverage.google
     },
-    reprocessCount: versions.length - 1
+    reprocessCount: 0, // TODO: Implement reprocess count in database
+    technicalNote: apiData.technicalNote,
+    reasons: apiData.reasons
   };
 };
 
@@ -126,12 +140,31 @@ export function AnalysisDetailProvider({
     const loadAnalysis = async () => {
       try {
         setIsLoading(true);
-        // Simular carregamento da API
-        await new Promise(resolve => setTimeout(resolve, 800));
+        setError(null);
         
-        const mockAnalysis = generateMockAnalysis(analysisId);
-        setAnalysis(mockAnalysis);
-      } catch {
+        console.log('Loading analysis with ID:', analysisId);
+        const response = await getAnalysisById(analysisId);
+        
+        if (!response.success || !response.data) {
+          setError(response.error || "Análise não encontrada");
+          return;
+        }
+        
+        const transformedData = transformGetAnalysisData(response.data);
+        if (!transformedData) {
+          setError("Erro ao processar dados da análise");
+          return;
+        }
+        
+        console.log('Transformed data from API:', transformedData);
+        
+        const detailedAnalysis = transformApiDataToDetailedAnalysis(transformedData);
+        console.log('Final detailed analysis:', detailedAnalysis);
+        
+        setAnalysis(detailedAnalysis);
+        
+      } catch (error) {
+        console.error('Error loading analysis:', error);
         setError("Erro ao carregar análise");
       } finally {
         setIsLoading(false);
@@ -146,25 +179,57 @@ export function AnalysisDetailProvider({
 
     try {
       setIsLoading(true);
+      setError(null);
       
-      // Simular chamada para /analyze
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      console.log('Reprocessing analysis with parameters:', parameters);
       
-      // Criar nova versão
+      // Call the analyze function with the same address but new parameters
+      const polygon = analysis.polygon.coordinates.length > 0 ? {
+        type: "Polygon" as const,
+        coordinates: [analysis.polygon.coordinates], // GeoJSON format
+        source: "user-drawn" as const
+      } : undefined;
+      
+      const response = await analyzeAddress({
+        address: analysis.address,
+        polygon,
+        usableAreaOverride: parameters.usableAreaOverride as number | undefined
+      });
+      
+      if (!response.success || !response.data) {
+        setError(response.error || "Erro ao reprocessar análise");
+        return;
+      }
+      
+      // Transform the new data
+      const transformedData = {
+        ...response.data,
+        id: analysis.id, // Keep the same ID
+        createdAt: new Date().toISOString() // New timestamp for reprocessing
+      };
+      
+      // Create new version
+      const previousProduction = analysis.currentVersion.estimatedProduction;
+      const newProduction = transformedData.estimatedProduction;
+      const variationFromPrevious = previousProduction > 0 ? 
+        ((newProduction - previousProduction) / previousProduction) * 100 : 0;
+      
       const newVersion: AnalysisVersion = {
         id: `${analysis.id}-v${analysis.history.length + 1}`,
-        date: new Date().toISOString(),
-        confidence: ["Alta", "Média", "Baixa"][Math.floor(Math.random() * 3)] as "Alta" | "Média" | "Baixa",
-        usableArea: Math.floor(120 + Math.random() * 80),
-        annualIrradiation: Math.floor(1400 + Math.random() * 400),
-        estimatedProduction: Math.floor((120 + Math.random() * 80) * (1400 + Math.random() * 400) * 0.15),
-        verdict: ["Apto", "Parcial", "Não apto"][Math.floor(Math.random() * 3)] as "Apto" | "Parcial" | "Não apto",
-        sources: ["PVGIS", "NASA SRTM", "Solcast"],
+        date: transformedData.createdAt,
+        confidence: transformedData.confidence,
+        usableArea: transformedData.usableArea,
+        annualIrradiation: transformedData.annualIrradiation,
+        estimatedProduction: transformedData.estimatedProduction,
+        verdict: transformedData.verdict,
+        sources: [transformedData.irradiationSource],
         parameters: {
-          usageFactor: (parameters.usageFactor as number) || 0.75,
+          usageFactor: transformedData.usageFactor,
           tiltEstimated: parameters.tiltEstimated as number | undefined
         },
-        variationFromPrevious: (Math.random() - 0.5) * 15
+        variationFromPrevious,
+        shadingIndex: transformedData.shadingIndex,
+        shadingLoss: transformedData.shadingLoss
       };
 
       const updatedAnalysis = {
@@ -172,20 +237,26 @@ export function AnalysisDetailProvider({
         lastUpdated: newVersion.date,
         currentVersion: newVersion,
         history: [...analysis.history, newVersion],
-        reprocessCount: analysis.reprocessCount + 1
+        reprocessCount: analysis.reprocessCount + 1,
+        sources: {
+          pvgis: transformedData.irradiationSource.includes('PVGIS'),
+          nasa: transformedData.irradiationSource.includes('NASA'),
+          solcast: transformedData.irradiationSource.includes('Solcast'),
+          google: transformedData.coverage.google
+        }
       };
 
       setAnalysis(updatedAnalysis);
       
-      // Métricas
-      console.log("📊 Reprocessamento:", {
+      console.log("📊 Reprocessamento concluído:", {
         analysis_id: analysisId,
         reprocess_count: updatedAnalysis.reprocessCount,
         variation: newVersion.variationFromPrevious,
         new_confidence: newVersion.confidence
       });
       
-    } catch {
+    } catch (error) {
+      console.error('Error reprocessing analysis:', error);
       setError("Erro ao reprocessar análise");
     } finally {
       setIsLoading(false);
@@ -196,13 +267,16 @@ export function AnalysisDetailProvider({
     if (!analysis) return;
     
     try {
-      // Simular duplicação
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      console.log("Análise duplicada:", analysis.address);
+      setError(null);
+      console.log("Duplicating analysis:", analysis.address);
       
-      // Aqui redirecionaria para nova análise
-      alert("Análise duplicada com sucesso!");
-    } catch {
+      // For now, redirect to new analysis page with the same address
+      // In the future, we could copy the polygon and parameters
+      const encodedAddress = encodeURIComponent(analysis.address);
+      window.open(`/dashboard/analysis?address=${encodedAddress}`, '_blank');
+      
+    } catch (error) {
+      console.error('Error duplicating analysis:', error);
       setError("Erro ao duplicar análise");
     }
   };
@@ -211,11 +285,15 @@ export function AnalysisDetailProvider({
     if (!analysis) return;
     
     try {
-      // Simular geração de PDF
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      console.log("PDF gerado para análise:", analysis.id);
-      alert("PDF gerado com sucesso!");
-    } catch {
+      setError(null);
+      console.log("Generating PDF for analysis:", analysis.id);
+      
+      // TODO: Implement PDF generation
+      // This could call a separate edge function or generate client-side
+      alert("Funcionalidade de PDF será implementada em breve!");
+      
+    } catch (error) {
+      console.error('Error generating PDF:', error);
       setError("Erro ao gerar PDF");
     }
   };

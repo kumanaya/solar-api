@@ -70,13 +70,23 @@ Deno.serve(async (req: Request) => {
     const json = await req.json();
     const input = GetAnalysisRequestSchema.parse(json);
 
-    // Get analysis from database
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log('input', input);
+    console.log('input.id', input.id);
+
+    // Get analysis from database with user's JWT token
+    const authHeader = req.headers.get("Authorization");
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          Authorization: authHeader!
+        }
+      }
+    });
+    
     const { data: analysis, error } = await supabase
       .from('analyses')
       .select('*')
       .eq('id', input.id)
-      .eq('user_id', auth.user.id) // Ensure user can only access their own analyses
       .single();
 
     if (error) {

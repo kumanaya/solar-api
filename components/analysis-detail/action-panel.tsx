@@ -110,11 +110,11 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
           {/* Informações adicionais */}
           <div className="text-xs text-muted-foreground space-y-1">
             <div className="flex items-center justify-between">
-              <span>📄 PDF incluirá todos os dados atuais da análise</span>
+              <span>* PDF incluirá todos os dados atuais da análise</span>
               <span>ID: #{analysis.id}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span>🔄 Reprocessar atualizará os cálculos com dados mais recentes</span>
+              <span>* Reprocessar atualizará os cálculos com dados mais recentes</span>
               <span>
                 {analysis.reprocessCount > 0 
                   ? `Última atualização: ${new Date(analysis.lastUpdated).toLocaleDateString('pt-BR')}`
