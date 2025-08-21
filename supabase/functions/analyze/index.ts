@@ -103,14 +103,11 @@ type SolarApiResponse = {
 // CORS (ajuste para seu domínio em prod)
 const ALLOWED_ORIGINS = ["*"]; // ex.: ["https://app.seuprojeto.com"]
 function corsHeaders(origin: string | null) {
-  const allowed =
-    ALLOWED_ORIGINS.includes("*") || (origin && ALLOWED_ORIGINS.includes(origin))
-      ? origin ?? "*"
-      : ALLOWED_ORIGINS[0];
   return {
-    "Access-Control-Allow-Origin": allowed,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
+    "Access-Control-Max-Age": "86400",
   };
 }
 
