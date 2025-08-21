@@ -4,12 +4,14 @@ import { useState, useEffect } from "react";
 import { MapPanel } from "@/components/analysis/map-panel";
 import { ResultsPanel } from "@/components/analysis/results-panel";
 import { AnalysisProvider } from "@/components/analysis/analysis-context";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function AnalysisPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
 
   useEffect(() => {
     // Simular carregamento inicial
@@ -21,7 +23,21 @@ export default function AnalysisPage() {
       setIsSidebarCollapsed(JSON.parse(savedState));
     }
     
-    return () => clearTimeout(timer);
+    // Verificar tamanho da tela
+    const checkScreenSize = () => {
+      setIsSmallScreen(window.innerWidth < 1024);
+    };
+    
+    // Verificar imediatamente
+    checkScreenSize();
+    
+    // Adicionar listener para mudanças
+    window.addEventListener('resize', checkScreenSize);
+    
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', checkScreenSize);
+    };
   }, []);
 
   const toggleSidebar = () => {
@@ -37,6 +53,19 @@ export default function AnalysisPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
           <p className="text-muted-foreground">Carregando análise...</p>
         </div>
+      </div>
+    );
+  }
+
+  if (isSmallScreen) {
+    return (
+      <div className="flex items-center justify-center min-h-screen p-4">
+        <Alert className="max-w-md border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
+          <Monitor className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+          <AlertDescription className="text-amber-800 dark:text-amber-200">
+            <strong>Melhor experiência em desktop:</strong> Algumas funcionalidades de análise e ferramentas de desenho funcionam melhor em telas maiores. Use um dispositivo com tela maior para acessar todas as funcionalidades.
+          </AlertDescription>
+        </Alert>
       </div>
     );
   }
