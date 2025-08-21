@@ -463,6 +463,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     }
   }, [showRelief, isMapLoaded]);
 
+
   // Handle polygon drawing
   useEffect(() => {
     if (!map.current || !isMapLoaded) return;
@@ -1058,6 +1059,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     }
   };
 
+
   return (
     <div className="h-full w-full relative">
       <div
@@ -1085,6 +1087,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
           <p className="text-sm text-muted-foreground">Localizando...</p>
         </div>
       )}
+
 
       {/* Drawing mode instructions */}
       {(drawingMode || isDrawingMode) && (

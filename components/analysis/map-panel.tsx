@@ -7,8 +7,10 @@ import { DrawingToolbar } from "./drawing-toolbar";
 import { LayerToggles } from "./layer-toggles";
 import { MapPin } from "lucide-react";
 import { MapLibreMapRef } from "./maplibre-map";
+import { useAnalysis } from "./analysis-context";
 
 export function MapPanel() {
+  const { data, hasAnalysisResults } = useAnalysis();
   const mapRef = useRef<MapLibreMapRef>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
@@ -60,6 +62,9 @@ export function MapPanel() {
       setShowPinInstructions(false);
     }
   }, [isPinMode]);
+
+  // Note: Data Layers are not auto-enabled anymore
+  // Users must manually click to enable and load them
 
   return (
     <div className="relative h-full w-full">

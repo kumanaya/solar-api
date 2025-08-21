@@ -2,9 +2,13 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText, RefreshCw, Copy, History, Loader2 } from "lucide-react";
+import { FileText, RefreshCw, Copy, History, Loader2, Image } from "lucide-react";
 import { useAnalysisDetail } from "./analysis-detail-context";
 import { PDFModal } from "../analysis/pdf-modal";
+import { GeoTIFFCarousel } from "./geotiff-carousel";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { getDataLayersByAnalysisId, requestDataLayers } from "@/lib/data-layers-api";
+import { toast } from "sonner";
 
 interface ActionPanelProps {
   onToggleHistory: () => void;
@@ -19,6 +23,83 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
   
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
+  const [isGeoTIFFModalOpen, setIsGeoTIFFModalOpen] = useState(false);
+  const [isLoadingGeoTIFFs, setIsLoadingGeoTIFFs] = useState(false);
+  const [geoTIFFImages, setGeoTIFFImages] = useState<Array<{
+    url: string;
+    title: string;
+    description: string;
+  }>>([]);
+
+  const handleLoadGeoTIFFs = async () => {
+    if (!analysis?.id) return;
+    
+    setIsLoadingGeoTIFFs(true);
+    try {
+      // Primeiro, tenta buscar dados existentes
+      let dataLayers = await getDataLayersByAnalysisId(analysis.id);
+      
+      // Se não existirem dados, faz a requisição para a edge function
+      if (!dataLayers?.stored_layers) {
+        toast.info("Gerando imagens GeoTIFF...");
+        
+        const [latitude, longitude] = analysis.coordinates;
+        const response = await requestDataLayers({
+          latitude,
+          longitude,
+          radiusMeters: 100,
+          view: "FULL_LAYERS",
+          requiredQuality: "HIGH"
+        });
+
+        if (!response.success || !response.data?.storedLayers) {
+          toast.error("Erro ao gerar as imagens GeoTIFF");
+          return;
+        }
+
+        // Atualiza dataLayers com a resposta
+        dataLayers = {
+          stored_layers: response.data.storedLayers
+        };
+      }
+
+      // Converter os dados para o formato do carrossel
+      const images: Array<{ url: string; title: string; description: string }> = [];
+      
+      // Processar camadas principais
+      const mainLayers = ['dsmUrl', 'rgbUrl', 'maskUrl', 'annualFluxUrl', 'monthlyFluxUrl'];
+      mainLayers.forEach(key => {
+        const layer = dataLayers.stored_layers[key];
+        if (layer && !Array.isArray(layer)) {
+          images.push({
+            url: layer.url,
+            title: layer.title,
+            description: layer.description
+          });
+        }
+      });
+
+      // Processar camadas horárias
+      const hourlyLayers = dataLayers.stored_layers.hourlyShadeUrls;
+      if (Array.isArray(hourlyLayers)) {
+        hourlyLayers.forEach(layer => {
+          images.push({
+            url: layer.url,
+            title: layer.title,
+            description: layer.description
+          });
+        });
+      }
+
+      setGeoTIFFImages(images);
+      setIsGeoTIFFModalOpen(true);
+    } catch (error) {
+      console.error('Error loading GeoTIFFs:', error);
+      toast.error("Erro ao carregar as imagens GeoTIFF");
+    } finally {
+      setIsLoadingGeoTIFFs(false);
+    }
+  };
 
   const handleDuplicate = async () => {
     setIsDuplicating(true);
@@ -59,6 +140,26 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
             >
               <FileText className="mr-2 h-4 w-4" />
               Gerar PDF
+            </Button>
+
+            {/* GeoTIFFs */}
+            <Button 
+              onClick={handleLoadGeoTIFFs}
+              className="flex-1 min-w-0"
+              variant="outline"
+              disabled={isLoadingGeoTIFFs}
+            >
+              {isLoadingGeoTIFFs ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Carregando...
+                </>
+              ) : (
+                <>
+                  <Image className="mr-2 h-4 w-4" aria-hidden="true" />
+                  GeoTIFFs
+                </>
+              )}
             </Button>
 
             {/* Reprocessar */}
@@ -156,6 +257,16 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
           usageFactor: analysis.currentVersion.parameters.usageFactor
         }}
       />
+
+      {/* Modal dos GeoTIFFs */}
+      <Dialog open={isGeoTIFFModalOpen} onOpenChange={setIsGeoTIFFModalOpen}>
+        <DialogContent className="max-w-4xl">
+          <GeoTIFFCarousel
+            images={geoTIFFImages}
+            onClose={() => setIsGeoTIFFModalOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

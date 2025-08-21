@@ -82,6 +82,7 @@ export function LayerToggles({
           </div>
           {showRelief && <Badge variant="secondary" className="text-xs ml-2 flex-shrink-0">ON</Badge>}
         </Button>
+        
       </div>
     </div>
   );
