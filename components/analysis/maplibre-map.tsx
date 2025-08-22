@@ -81,6 +81,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   const [currentLayer, setCurrentLayer] = useState<string>(layer);
   const [showAttribution, setShowAttribution] = useState(false);
   const currentMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const currentPopupRef = useRef<maplibregl.Popup | null>(null);
   const [currentPin, setCurrentPin] = useState<{
     coordinates: [number, number];
     address: string;
@@ -133,6 +134,23 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     } catch (error) {
       console.error('Error clearing pin from session storage:', error);
     }
+  };
+
+  // Helper function to manage popup (ensure only one exists at a time)
+  const showPopup = (lngLat: [number, number] | maplibregl.LngLatLike, content: string) => {
+    if (!map.current) return;
+    
+    // Close existing popup if any
+    if (currentPopupRef.current) {
+      currentPopupRef.current.remove();
+      currentPopupRef.current = null;
+    }
+    
+    // Create new popup
+    currentPopupRef.current = new maplibregl.Popup()
+      .setLngLat(lngLat)
+      .setHTML(content)
+      .addTo(map.current);
   };
 
   // Expose functions to parent via ref
@@ -201,6 +219,16 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
           console.error('Error removing marker:', error);
         }
         currentMarkerRef.current = null;
+      }
+      
+      // Close any open popup
+      if (currentPopupRef.current) {
+        try {
+          currentPopupRef.current.remove();
+        } catch (error) {
+          console.error('Error removing popup:', error);
+        }
+        currentPopupRef.current = null;
       }
       
       // Clear all pin state
@@ -398,21 +426,19 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         if (e.features && e.features[0]) {
           const feature = e.features[0];
           const area = feature.properties?.area;
-          new maplibregl.Popup()
-            .setLngLat(e.lngLat)
-            .setHTML(`
-              <div style="
-                background: hsl(var(--background));
-                color: hsl(var(--foreground));
-                border: 1px solid hsl(var(--border));
-                border-radius: 6px;
-                padding: 8px 12px;
-                font-size: 13px;
-              ">
-                <span style="font-weight: 500; color: hsl(var(--foreground));">Área:</span> ${area}m²
-              </div>
-            `)
-            .addTo(map.current!);
+          const popupContent = `
+            <div style="
+              background: hsl(var(--background));
+              color: hsl(var(--foreground));
+              border: 1px solid hsl(var(--border));
+              border-radius: 6px;
+              padding: 8px 12px;
+              font-size: 13px;
+            ">
+              <span style="font-weight: 500; color: hsl(var(--foreground));">Área:</span> ${area}m²
+            </div>
+          `;
+          showPopup(e.lngLat, popupContent);
         }
       });
 
@@ -1145,32 +1171,30 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       if (e.features && e.features[0]) {
         const feature = e.features[0];
         const area = feature.properties?.area;
-        new maplibregl.Popup()
-          .setLngLat(e.lngLat)
-          .setHTML(`
-            <div style="
-              background: hsl(var(--background));
-              color: hsl(var(--foreground));
-              border: 1px solid hsl(var(--border));
-              border-radius: 8px;
-              padding: 12px;
-              box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-              min-width: 200px;
-            ">
-              <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px; color: hsl(var(--foreground));">
-                Área Desenhada
+        const popupContent = `
+          <div style="
+            background: hsl(var(--background));
+            color: hsl(var(--foreground));
+            border: 1px solid hsl(var(--border));
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            min-width: 200px;
+          ">
+            <div style="font-weight: 600; font-size: 14px; margin-bottom: 8px; color: hsl(var(--foreground));">
+              Área Desenhada
+            </div>
+            <div style="font-size: 13px; color: hsl(var(--muted-foreground));">
+              <div style="margin-bottom: 4px;">
+                <span style="font-weight: 500; color: hsl(var(--foreground));">Área:</span> ${area}m²
               </div>
-              <div style="font-size: 13px; color: hsl(var(--muted-foreground));">
-                <div style="margin-bottom: 4px;">
-                  <span style="font-weight: 500; color: hsl(var(--foreground));">Área:</span> ${area}m²
-                </div>
-                <div>
-                  <span style="font-weight: 500; color: hsl(var(--foreground));">Fonte:</span> Desenho manual
-                </div>
+              <div>
+                <span style="font-weight: 500; color: hsl(var(--foreground));">Fonte:</span> Desenho manual
               </div>
             </div>
-          `)
-          .addTo(map.current!);
+          </div>
+        `;
+        showPopup(e.lngLat, popupContent);
       }
     });
 
