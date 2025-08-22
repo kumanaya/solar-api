@@ -1,5 +1,11 @@
 // Edge Function – Get Analysis by ID
 
+// @ts-expect-error Deno types no edge
+declare const Deno: {
+  env: { get(k: string): string | undefined };
+  serve(h: (r: Request) => Response | Promise<Response>): void;
+};
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.5";
 import { z } from "https://esm.sh/zod@3.23.8";
 
@@ -8,12 +14,62 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
 /* ========= SCHEMAS ========= */
+const ShadingDescriptionEnum = z.enum([
+  "sem_sombra",      // 0-5% - Área totalmente livre
+  "sombra_minima",   // 5-15% - Pequenas obstruções pontuais
+  "sombra_parcial",  // 15-30% - Obstruções em parte do dia
+  "sombra_moderada", // 30-45% - Sombreamento significativo
+  "sombra_severa"    // 45-60% - Sombreamento crítico
+]);
+
+const AnalysisSchema = z.object({
+  address: z.string(),
+  coordinates: z.object({
+    lat: z.number(),
+    lng: z.number()
+  }),
+  coverage: z.object({
+    google: z.boolean(),
+    fallback: z.string().optional()
+  }),
+  confidence: z.string(),
+  usableArea: z.number(),
+  areaSource: z.enum(["google", "manual", "footprint", "estimate"]),
+  usageFactor: z.number(),
+  annualIrradiation: z.number(),
+  irradiationSource: z.string(),
+  shadingIndex: z.number(),
+  shadingLoss: z.number(),
+  shadingSource: z.enum(["google_measured", "user_input", "description", "heuristic"]),
+  estimatedProduction: z.number(),
+  estimatedProductionAC: z.number(),
+  estimatedProductionDC: z.number(),
+  estimatedProductionYear1: z.number(),
+  estimatedProductionYear25: z.number(),
+  temperatureLosses: z.number(),
+  degradationFactor: z.number(),
+  effectivePR: z.number(),
+  verdict: z.enum(["Apto", "Parcial", "Não apto"]),
+  reasons: z.array(z.string()),
+  recommendations: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+  footprints: z.array(z.object({
+    id: z.string(),
+    coordinates: z.array(z.tuple([z.number(), z.number()])),
+    area: z.number(),
+    isActive: z.boolean(),
+    source: z.string()
+  })),
+  googleSolarData: z.any().optional(),
+  technicalNote: z.string()
+});
+
 const GetAnalysisRequestSchema = z.object({
   id: z.string().uuid(),
 });
 
 /* ========= CORS ========= */
-function corsHeaders(origin: string | null) {
+function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
@@ -43,7 +99,7 @@ async function verifyAuth(req: Request) {
 /* ========= HANDLER ========= */
 
 Deno.serve(async (req: Request) => {
-  const headers = corsHeaders(req.headers.get("origin"));
+  const headers = corsHeaders();
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers });
@@ -145,7 +201,7 @@ Deno.serve(async (req: Request) => {
     const message = err instanceof Error ? err.message : "Internal error";
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
-      headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+      headers: { ...corsHeaders(), "Content-Type": "application/json" },
     });
   }
 });

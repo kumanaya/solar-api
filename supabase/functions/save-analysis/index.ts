@@ -17,60 +17,62 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
 /* ========= SCHEMAS ========= */
-const SaveAnalysisRequestSchema = z.object({
-  analysisData: z.object({
-    address: z.string(),
-    coordinates: z.union([
-      // Support both formats: [lng, lat] array and {lat, lng} object
-      z.tuple([z.number(), z.number()]), // [lng, lat]
-      z.object({
-        lat: z.number(),
-        lng: z.number(),
-      })
-    ]),
-    coverage: z.object({
-      google: z.boolean(),
-      fallback: z.string().optional(),
-      dataQuality: z.enum(["measured", "calculated", "estimated"]).optional(),
-    }),
-    confidence: z.enum(["Alta", "Média", "Baixa"]),
-    usableArea: z.number(),
-    areaSource: z.enum(["google", "estimate", "footprint", "manual"]),
-    annualIrradiation: z.number(),
-    shadingSource: z.enum(["google_measured", "user_input", "description", "heuristic"]).optional(),
-    irradiationSource: z.string(),
-    shadingIndex: z.number(),
-    shadingLoss: z.number(),
-    estimatedProduction: z.number(),
-    estimatedProductionAC: z.number().optional(),
-    estimatedProductionDC: z.number().optional(),
-    estimatedProductionYear1: z.number().optional(),
-    estimatedProductionYear25: z.number().optional(),
-    temperatureLosses: z.number().optional(),
-    degradationFactor: z.number().optional(),
-    effectivePR: z.number().optional(),
-    verdict: z.enum(["Apto", "Parcial", "Não apto"]),
-    reasons: z.array(z.string()),
-    recommendations: z.array(z.string()).optional(),
-    warnings: z.array(z.string()).optional(),
-    usageFactor: z.number(),
-    footprints: z.array(z.object({
-      id: z.string(),
-      coordinates: z.array(z.tuple([z.number(), z.number()])),
-      area: z.number(),
-      isActive: z.boolean(),
-      source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
-    })),
-    googleSolarData: z.any().optional(),
-    technicalNote: z.string().optional(),
-    // Optional fields that may be present
-    id: z.string().optional(),
-    createdAt: z.string().optional(),
+const ShadingDescriptionEnum = z.enum([
+  "sem_sombra",      // 0-5% - Área totalmente livre
+  "sombra_minima",   // 5-15% - Pequenas obstruções pontuais
+  "sombra_parcial",  // 15-30% - Obstruções em parte do dia
+  "sombra_moderada", // 30-45% - Sombreamento significativo
+  "sombra_severa"    // 45-60% - Sombreamento crítico
+]);
+
+const AnalysisSchema = z.object({
+  address: z.string(),
+  coordinates: z.object({
+    lat: z.number(),
+    lng: z.number()
   }),
+  coverage: z.object({
+    google: z.boolean(),
+    fallback: z.string().optional()
+  }),
+  confidence: z.string(),
+  usableArea: z.number(),
+  areaSource: z.enum(["google", "manual", "footprint", "estimate"]),
+  usageFactor: z.number(),
+  annualIrradiation: z.number(),
+  irradiationSource: z.string(),
+  shadingIndex: z.number(),
+  shadingLoss: z.number(),
+  shadingSource: z.enum(["google_measured", "user_input", "description", "heuristic"]),
+  estimatedProduction: z.number(),
+  estimatedProductionAC: z.number(),
+  estimatedProductionDC: z.number(),
+  estimatedProductionYear1: z.number(),
+  estimatedProductionYear25: z.number(),
+  temperatureLosses: z.number(),
+  degradationFactor: z.number(),
+  effectivePR: z.number(),
+  verdict: z.enum(["Apto", "Parcial", "Não apto"]),
+  reasons: z.array(z.string()),
+  recommendations: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+  footprints: z.array(z.object({
+    id: z.string(),
+    coordinates: z.array(z.tuple([z.number(), z.number()])),
+    area: z.number(),
+    isActive: z.boolean(),
+    source: z.string()
+  })),
+  googleSolarData: z.any().optional(),
+  technicalNote: z.string()
+});
+
+const SaveAnalysisRequestSchema = z.object({
+  analysisData: AnalysisSchema
 });
 
 /* ========= DATABASE ========= */
-async function saveAnalysisToDatabase(analysisData: any, userId: string, supabase: any) {
+async function saveAnalysisToDatabase(analysisData: z.infer<typeof AnalysisSchema>, userId: string, supabase: ReturnType<typeof createClient>) {
   try {
     console.log('Attempting to save analysis for user:', userId);
     console.log('Analysis data keys:', Object.keys(analysisData));
@@ -113,11 +115,15 @@ async function saveAnalysisToDatabase(analysisData: any, userId: string, supabas
       recommendations: analysisData.recommendations,
       warnings: analysisData.warnings,
       footprints: analysisData.footprints,
-      google_solar_data: analysisData.googleSolarData ? JSON.parse(JSON.stringify(analysisData.googleSolarData)) : null,
+      google_solar_data: analysisData.googleSolarData || null,
       technical_note: analysisData.technicalNote
     };
     
     console.log('Insert data prepared:', JSON.stringify(insertData, null, 2));
+    console.log('Google Solar Data present:', !!analysisData.googleSolarData);
+    if (analysisData.googleSolarData) {
+      console.log('Google Solar Data keys:', Object.keys(analysisData.googleSolarData));
+    }
 
     const { data, error } = await supabase
       .from('analyses')

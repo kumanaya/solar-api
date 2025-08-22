@@ -58,6 +58,12 @@ interface AnalysisResponse {
     googleSolarData?: object;
     technicalNote?: string;
     createdAt?: string;
+    updatedAt?: string;
+    customPolygon?: {
+      type: "Polygon";
+      coordinates: number[][][];
+      source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
+    };
   };
   error?: string;
   errorCode?: string;
@@ -226,7 +232,10 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
       source: fp.source
     })),
     usageFactor: apiData.usageFactor,
+    googleSolarData: apiData.googleSolarData,
     technicalNote: apiData.technicalNote,
-    createdAt: apiData.createdAt
+    createdAt: apiData.createdAt,
+    updatedAt: apiData.updatedAt,
+    customPolygon: apiData.customPolygon
   };
 }

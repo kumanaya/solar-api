@@ -68,9 +68,19 @@ export function ActionButtons() {
       console.log('annualIrradiation field value:', data.annualIrradiation);
       
       const supabase = createClient();
+      // Validate and prepare analysis data for saving using schema
+      const analysisDataToSave = {
+        ...data,
+        coordinates: Array.isArray(data.coordinates) 
+          ? { lat: data.coordinates[1], lng: data.coordinates[0] }
+          : data.coordinates
+      };
+
+      console.log('Prepared analysis data for saving:', JSON.stringify(analysisDataToSave, null, 2));
+
       const { data: saveResult, error } = await supabase.functions.invoke('save-analysis', {
         body: {
-          analysisData: data
+          analysisData: analysisDataToSave
         }
       });
 
