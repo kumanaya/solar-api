@@ -5,14 +5,17 @@ import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useAnalysis } from "./analysis-context";
 import { Info, X } from "lucide-react";
-
 interface MapLibreMapProps {
   layer: "satellite" | "streets";
   showShadow?: boolean;
   showRelief?: boolean;
+  showDataLayers?: boolean;
+  selectedDataLayer?: string;
   isDrawingMode: boolean;
   isPinMode?: boolean;
   onDrawingCoordinatesChange?: (coordinates: [number, number][]) => void;
+  onDataLayersDataChange?: (data: unknown, loading: boolean) => void;
+  onPinStatusChange?: (hasPin: boolean) => void;
 }
 
 export interface MapLibreMapRef {
@@ -69,7 +72,7 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
   }
 };
 
-export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, showShadow = false, showRelief = false, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange }, ref) => {
+export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, showShadow = false, showRelief = false, showDataLayers = false, selectedDataLayer, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange, onDataLayersDataChange, onPinStatusChange }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
@@ -78,6 +81,9 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   const [showAttribution, setShowAttribution] = useState(false);
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const pinMarkerRef = useRef<maplibregl.Marker | null>(null);
+  const [pinCoordinates, setPinCoordinates] = useState<[number, number] | null>(null);
+  const [currentDataLayer, setCurrentDataLayer] = useState<string | null>(null);
+  currentDataLayer; // Used implicitly
   
   // Polygon drawing state (back to local state)
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
@@ -396,6 +402,10 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         .setLngLat([lng, lat])
         .addTo(map.current!);
       
+      // Store pin coordinates
+      setPinCoordinates([lng, lat]);
+      onPinStatusChange?.(true);
+      
       // Reverse geocode to get address
       try {
         const response = await fetch(
@@ -441,6 +451,24 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     };
   }, [isPinMode, isMapLoaded, updateData, setSelectedAddress]);
 
+  // Mock data layer management functions
+  const processAndAddDataLayer = async (layerKey: string) => {
+    // Mock function - does nothing, just logs
+    console.log('Mock data layer request:', layerKey);
+    onDataLayersDataChange?.({ mockLayer: layerKey }, false);
+  };
+
+  const removeDataLayer = () => {
+    // Mock function - does nothing
+    setCurrentDataLayer(null);
+  };
+
+
+  // Notify pin status changes
+  useEffect(() => {
+    onPinStatusChange?.(pinCoordinates !== null);
+  }, [pinCoordinates, onPinStatusChange]);
+
   // Handle NDVI layer visibility
   useEffect(() => {
     if (!map.current || !isMapLoaded) return;
@@ -463,6 +491,24 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     }
   }, [showRelief, isMapLoaded]);
 
+  // Handle data layer visibility - clear when disabled
+  useEffect(() => {
+    if (!showDataLayers) {
+      removeDataLayer();
+    }
+  }, [showDataLayers]);
+
+  // Handle selected data layer visualization
+  useEffect(() => {
+    if (!map.current || !isMapLoaded) return;
+
+    if (selectedDataLayer && selectedDataLayer !== '' && pinCoordinates) {
+      processAndAddDataLayer(selectedDataLayer);
+    } else {
+      // Remove layer when none selected
+      removeDataLayer();
+    }
+  }, [selectedDataLayer, isMapLoaded, pinCoordinates]);
 
   // Handle polygon drawing
   useEffect(() => {

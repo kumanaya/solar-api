@@ -10,13 +10,16 @@ import { MapLibreMapRef } from "./maplibre-map";
 import { useAnalysis } from "./analysis-context";
 
 export function MapPanel() {
-  const { data, hasAnalysisResults } = useAnalysis();
+  const { data: _data, hasAnalysisResults: _hasAnalysisResults } = useAnalysis();
   const mapRef = useRef<MapLibreMapRef>(null);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
   const [mapLayer, setMapLayer] = useState<"satellite" | "streets">("satellite");
   const [showShadow, setShowShadow] = useState(false);
   const [showRelief, setShowRelief] = useState(false);
+  const [showDataLayers, setShowDataLayers] = useState(false);
+  const [selectedDataLayer, setSelectedDataLayer] = useState<string>('');
+  const [hasPin, setHasPin] = useState(false);
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
   const [showDrawingInstructions, setShowDrawingInstructions] = useState(false);
   const [showPinInstructions, setShowPinInstructions] = useState(false);
@@ -33,6 +36,12 @@ export function MapPanel() {
   // Callback to sync coordinates from map
   const handleDrawingCoordinatesChange = (coordinates: [number, number][]) => {
     setDrawingCoordinates(coordinates);
+  };
+
+
+  // Callback to receive pin status from map
+  const handlePinStatusChange = (hasPin: boolean) => {
+    setHasPin(hasPin);
   };
 
   // Auto-hide drawing instructions after 5 seconds
@@ -98,6 +107,11 @@ export function MapPanel() {
             onShadowToggle={setShowShadow}
             showRelief={showRelief}
             onReliefToggle={setShowRelief}
+            showDataLayers={showDataLayers}
+            onDataLayersToggle={setShowDataLayers}
+            selectedDataLayer={selectedDataLayer}
+            onDataLayerSelect={setSelectedDataLayer}
+            hasPin={hasPin}
           />
         )}
         
@@ -151,9 +165,12 @@ export function MapPanel() {
         layer={mapLayer}
         showShadow={showShadow}
         showRelief={showRelief}
+        showDataLayers={showDataLayers}
+        selectedDataLayer={selectedDataLayer}
         isDrawingMode={isDrawingMode}
         isPinMode={isPinMode}
         onDrawingCoordinatesChange={handleDrawingCoordinatesChange}
+        onPinStatusChange={handlePinStatusChange}
       />
 
       {/* Instruções de desenho - quando ativo */}
