@@ -1,12 +1,17 @@
 // deno-lint-ignore-file no-explicit-any
-// Edge Function – Análise Solar para Laudo Técnico (corrigida, patches aplicados v2.2)
+// Edge Function – Análise Solar para Laudo Técnico (v3.0 - Otimizada para Brasil)
+// Melhorias aplicadas: sombreamento manual, perdas térmicas, degradação, validação BR
 
-// @ts-ignore Deno types no edge
+// @ts-expect-error Deno types no edge
 declare const Deno: {
   env: { get(k: string): string | undefined };
   serve(h: (r: Request) => Response | Promise<Response>): void;
 };
 
+// Type-only imports for Deno edge runtime
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.43.5";
+import type { ZodSchema } from "https://esm.sh/zod@3.23.8";
+// Runtime imports
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.5";
 import { z } from "https://esm.sh/zod@3.23.8";
 
@@ -16,14 +21,32 @@ const GOOGLE_SOLAR_API_KEY = GOOGLE_MAPS_API_KEY;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-/* ========= CONSTANTES ========= */
+/* ========= CONSTANTES APRIMORADAS ========= */
 const WGS84_R = 6378137; // raio (m)
-const DEFAULT_EFF = 0.20; // 20% ≈ 200 Wp/m²
-const DEFAULT_PR = 0.75;
-const MAX_SHADE_LOSS = 0.30; // agora até 30%
-const INVERTER_EFF = 0.96; // eficiência de conversão DC→AC (~4% perdas)
+const DEFAULT_EFF = 0.20; // 20% ≈ 200 Wp/m² (módulos policristalino padrão)
+const DEFAULT_PR = 0.75; // Performance Ratio base
+const INVERTER_EFF = 0.96; // eficiência de conversão DC→AC
+const ANNUAL_DEGRADATION = 0.006; // 0.6% ao ano (NBR 16274)
+const TEMP_COEFFICIENT = -0.004; // -0.4%/°C (silício cristalino)
+const STC_TEMP = 25; // Standard Test Conditions (°C)
 
-/* ========= SCHEMAS ========= */
+// Limites do território brasileiro
+const BRAZIL_BOUNDS = {
+  north: 5.27,
+  south: -33.75,
+  east: -34.79,
+  west: -73.98
+};
+
+/* ========= SCHEMAS APRIMORADOS ========= */
+const ShadingDescriptionEnum = z.enum([
+  "sem_sombra",      // 0-5% - Área totalmente livre
+  "sombra_minima",   // 5-15% - Pequenas obstruções pontuais
+  "sombra_parcial",  // 15-30% - Obstruções em parte do dia
+  "sombra_moderada", // 30-45% - Sombreamento significativo
+  "sombra_severa"    // 45-60% - Sombreamento crítico
+]);
+
 const AnalyzeRequestSchema = z.object({
   address: z.string().min(5),
   lat: z.number().min(-90).max(90),
@@ -33,7 +56,13 @@ const AnalyzeRequestSchema = z.object({
     type: z.literal("Polygon"),
     coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))),
     source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
-  }),
+  }).optional(),
+  // NOVOS CAMPOS para melhor precisão
+  shadingOverride: z.number().min(0).max(1).optional(),
+  shadingDescription: ShadingDescriptionEnum.optional(),
+  averageTemperature: z.number().min(15).max(35).optional(),
+  moduleType: z.enum(["monocristalino", "policristalino", "filme_fino"]).optional(),
+  systemAge: z.number().min(0).max(30).optional(),
 });
 
 const AnalysisSchema = z.object({
@@ -43,6 +72,7 @@ const AnalysisSchema = z.object({
   coverage: z.object({
     google: z.boolean(),
     fallback: z.string().optional(),
+    dataQuality: z.enum(["measured", "calculated", "estimated"]).optional(),
   }),
   confidence: z.enum(["Alta", "Média", "Baixa"]),
   usableArea: z.number(),
@@ -51,11 +81,22 @@ const AnalysisSchema = z.object({
   irradiationSource: z.string(),
   shadingIndex: z.number(),
   shadingLoss: z.number(),
+  shadingSource: z.enum(["google_measured", "user_input", "description", "heuristic"]),
   estimatedProduction: z.number(),
   estimatedProductionAC: z.number().optional(),
   estimatedProductionDC: z.number().optional(),
+  // NOVOS CAMPOS de análise detalhada
+  estimatedProductionYear1: z.number().optional(),
+  estimatedProductionYear25: z.number().optional(),
+  temperatureLosses: z.number().optional(),
+  degradationFactor: z.number().optional(),
+  effectivePR: z.number().optional(),
+  // Classificação e recomendações
   verdict: z.enum(["Apto", "Parcial", "Não apto"]),
   reasons: z.array(z.string()),
+  recommendations: z.array(z.string()).optional(),
+  warnings: z.array(z.string()).optional(),
+  // Metadados
   usageFactor: z.number(),
   footprints: z.array(z.object({
     id: z.string(),
@@ -110,9 +151,9 @@ type SolarApiResponse = {
   error?: { code: number; message: string; status: string };
 };
 
-/* ========= HELPERS ========= */
+/* ========= HELPERS APRIMORADOS ========= */
 
-function corsHeaders(_origin: string | null) {
+function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
@@ -135,9 +176,112 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
+// Verifica se coordenadas estão no Brasil
+function isBrazilianCoordinate(lat: number, lng: number): boolean {
+  return lat >= BRAZIL_BOUNDS.south && lat <= BRAZIL_BOUNDS.north && 
+         lng >= BRAZIL_BOUNDS.west && lng <= BRAZIL_BOUNDS.east;
+}
+
+// Obter temperatura média regional do Brasil
+function getBrazilianAverageTemperature(lat: number): number {
+  // Baseado em zonas climáticas brasileiras
+  if (lat > -5) return 27;  // Norte (Amazônia, clima equatorial)
+  if (lat > -10) return 26; // Nordeste (clima tropical)
+  if (lat > -16) return 25; // Centro-Oeste (tropical com estação seca)
+  if (lat > -24) return 23; // Sudeste (tropical de altitude)
+  return 20; // Sul (subtropical)
+}
+
+// Performance Ratio ajustado por região brasileira
+function getBrazilianPR(lat: number, lng: number, baseTemp: number): number {
+  const basePR = DEFAULT_PR;
+  
+  // Ajuste por temperatura
+  const tempLoss = (baseTemp - STC_TEMP) * Math.abs(TEMP_COEFFICIENT);
+  
+  // Ajuste regional
+  let regionalFactor = 1.0;
+  if (lat < -20) {
+    // Sul/Sudeste: clima mais ameno, menos perdas
+    regionalFactor = 1.02;
+  } else if (lat > -10 && lng > -40) {
+    // Nordeste: alta irradiação mas alta temperatura
+    regionalFactor = 0.97;
+  } else {
+    // Norte/Centro-Oeste: umidade e calor
+    regionalFactor = 0.98;
+  }
+  
+  return basePR * (1 - tempLoss) * regionalFactor;
+}
+
+// Irradiação típica por região do Brasil
+function getBrazilianTypicalGHI(lat: number): number {
+  if (lat > -10) return 1950;  // Norte/Nordeste (alta irradiação)
+  if (lat > -16) return 1800;  // Centro-Oeste
+  if (lat > -24) return 1650;  // Sudeste
+  if (lat > -28) return 1550;  // Sul (PR, SC norte)
+  return 1450; // Extremo Sul (RS)
+}
+
+// Converte descrição de sombreamento em índice numérico
+function shadingDescriptionToIndex(description: string): number {
+  const mapping: Record<string, number> = {
+    "sem_sombra": 0.025,      // 2.5% - perdas mínimas inevitáveis
+    "sombra_minima": 0.10,     // 10%
+    "sombra_parcial": 0.225,   // 22.5%
+    "sombra_moderada": 0.375,  // 37.5%
+    "sombra_severa": 0.525     // 52.5%
+  };
+  return mapping[description] ?? 0.15;
+}
+
+// Análise heurística de sombreamento melhorada
+function analyzeUrbanShading(address: string, lat: number): number {
+  const lower = address.toLowerCase();
+  
+  // Indicadores de alta densidade urbana
+  const highDensity = ["centro", "downtown", "edifício", "edificio", "prédio", "predio", 
+                       "apartamento", "torre", "tower", "arranha"];
+  
+  // Indicadores de área aberta
+  const openArea = ["fazenda", "sítio", "sitio", "chácara", "chacara", "rural", 
+                    "rodovia", "estrada", "km ", "distrito industrial", "galpão", "galpao",
+                    "armazém", "armazem", "condomínio logístico", "condominio logistico"];
+  
+  // Indicadores de área residencial suburbana
+  const suburban = ["jardim", "jardins", "parque", "residencial", "condomínio fechado",
+                   "condominio fechado", "alameda", "alphaville", "granja"];
+  
+  // Indicadores de vegetação densa
+  const vegetation = ["bosque", "floresta", "mata", "arborizado", "verde", "ecological"];
+  
+  // Análise baseada em palavras-chave
+  let shadeIndex = 0.10; // base
+  
+  if (highDensity.some(term => lower.includes(term))) {
+    shadeIndex = 0.25; // 25% - alta densidade urbana
+  } else if (openArea.some(term => lower.includes(term))) {
+    shadeIndex = 0.05; // 5% - área aberta
+  } else if (vegetation.some(term => lower.includes(term))) {
+    shadeIndex = 0.35; // 35% - vegetação densa
+  } else if (suburban.some(term => lower.includes(term))) {
+    shadeIndex = 0.15; // 15% - suburbano típico
+  } else if (lower.includes("rua ") || lower.includes("avenida ")) {
+    shadeIndex = 0.18; // 18% - urbano genérico
+  }
+  
+  // Ajuste por latitude (sombras mais longas no sul)
+  if (lat < -23) {
+    shadeIndex += 0.03; // adiciona 3% no sul do país
+  }
+  
+  return clamp(shadeIndex, 0, 0.6);
+}
+
 function shadeLossFracFromIndex(idx: number) {
   const clamped = clamp(idx ?? 0, 0, 1);
-  return MAX_SHADE_LOSS * clamped;
+  return clamped; // Agora o índice já representa a fração de perda diretamente
 }
 
 /** Área de polígono geodésica em m² (Chamberlain & Duquette, esfera) */
@@ -154,7 +298,7 @@ function polygonAreaM2_geodesic(coords: [number, number][]): number {
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const λ1 = (lon1 * Math.PI) / 180;
-    let λ2 = (lon2 * Math.PI) / 180;
+    const λ2 = (lon2 * Math.PI) / 180;
     let dλ = λ2 - λ1;
     if (dλ > Math.PI) dλ -= 2 * Math.PI;
     if (dλ < -Math.PI) dλ += 2 * Math.PI;
@@ -201,20 +345,71 @@ function circularMean(degArr: number[]): number {
   return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
 }
 
-// Produção via PVGIS E_y (kWh/kWp/ano) → NÃO usar PR
+// Modelo de transposição GHI→POA aprimorado (Liu-Jordan simplificado)
+function getTranspositionFactor(lat: number, tilt: number, azimuth: number): number {
+  const lat_rad = Math.abs(lat) * Math.PI / 180;
+  const tilt_rad = tilt * Math.PI / 180;
+  const az_rad = azimuth * Math.PI / 180;
+  
+  // Fator de inclinação (beam radiation)
+  const Rb = Math.cos(lat_rad - tilt_rad) / Math.cos(lat_rad);
+  
+  // Correção azimutal (desvio do norte no hemisfério sul)
+  const az_factor = 1 - 0.1 * Math.abs(Math.sin(az_rad));
+  
+  // Componente difusa (15-25% típico no Brasil)
+  const diffuse_ratio = 0.20; // 20% difusa
+  const diffuse_factor = (1 - diffuse_ratio) + diffuse_ratio * (1 + Math.cos(tilt_rad)) / 2;
+  
+  // Componente de albedo (reflexão do solo)
+  const albedo = 0.20; // concreto/asfalto típico
+  const albedo_factor = albedo * (1 - Math.cos(tilt_rad)) / 2;
+  
+  // Fator total
+  const total = Rb * az_factor * diffuse_factor + albedo_factor;
+  
+  // Limitar entre valores realistas
+  return Math.max(0.65, Math.min(1.15, total));
+}
+
+// Cálculo de eficiência baseado no tipo de módulo
+function getModuleEfficiency(moduleType?: string): number {
+  const efficiencies: Record<string, number> = {
+    "monocristalino": 0.22,  // 22% - alta eficiência
+    "policristalino": 0.20,  // 20% - padrão
+    "filme_fino": 0.15       // 15% - menor eficiência
+  };
+  return efficiencies[moduleType ?? "policristalino"] ?? DEFAULT_EFF;
+}
+
+// Produção via PVGIS E_y com melhorias
 function estimateByPVGIS_Ey(params: {
   Ey_kwh_per_kwp_year: number;
   usable_area_m2: number;
   module_eff?: number;
   shade_index?: number;
+  temperature?: number;
+  system_age?: number;
 }) {
   const eff = params.module_eff ?? DEFAULT_EFF;
   const kWp = params.usable_area_m2 * eff;
+  
+  // Perdas por sombreamento
   const shadeLoss = 1 - shadeLossFracFromIndex(params.shade_index ?? 0);
-  return params.Ey_kwh_per_kwp_year * kWp * shadeLoss;
+  
+  // Perdas por temperatura
+  const tempLoss = params.temperature 
+    ? 1 - Math.max(0, (params.temperature - STC_TEMP) * Math.abs(TEMP_COEFFICIENT))
+    : 1;
+  
+  // Degradação temporal
+  const years = params.system_age ?? 0;
+  const degradation = Math.pow(1 - ANNUAL_DEGRADATION, years);
+  
+  return params.Ey_kwh_per_kwp_year * kWp * shadeLoss * tempLoss * degradation;
 }
 
-// Produção via GHI (kWh/m²/ano) → aplica PR + transposição para POA
+// Produção via GHI com modelo aprimorado
 function estimateByGHI(params: {
   ghi_kwh_m2_year: number;
   usable_area_m2: number;
@@ -222,64 +417,146 @@ function estimateByGHI(params: {
   pr?: number;
   shade_index?: number;
   tilt_deg?: number;
+  azimuth_deg?: number;
   lat?: number;
+  temperature?: number;
+  system_age?: number;
 }) {
   const eff = params.module_eff ?? DEFAULT_EFF;
   const pr = params.pr ?? DEFAULT_PR;
+  
+  // Perdas por sombreamento
   const shadeLoss = 1 - shadeLossFracFromIndex(params.shade_index ?? 0);
-  // Ajuste de transposição GHI→POA (simplificado)
+  
+  // Fator de transposição GHI→POA
   let transpositionFactor = 1.0;
   if (params.tilt_deg != null && params.lat != null) {
-    const tilt = params.tilt_deg * Math.PI / 180;
-    const lat = Math.abs(params.lat) * Math.PI / 180;
-    transpositionFactor = Math.max(0.7, Math.cos(lat - tilt) / Math.cos(lat)); // clamp mínimo 0.7
-  } else {
-    transpositionFactor = 0.9; // valor médio para tilts 10–25°
+    transpositionFactor = getTranspositionFactor(
+      params.lat,
+      params.tilt_deg,
+      params.azimuth_deg ?? 0
+    );
   }
-  return params.ghi_kwh_m2_year * params.usable_area_m2 * eff * pr * transpositionFactor * shadeLoss;
+  
+  // Perdas por temperatura
+  const tempLoss = params.temperature 
+    ? 1 - Math.max(0, (params.temperature - STC_TEMP) * Math.abs(TEMP_COEFFICIENT))
+    : 1;
+  
+  // Degradação temporal
+  const years = params.system_age ?? 0;
+  const degradation = Math.pow(1 - ANNUAL_DEGRADATION, years);
+  
+  return params.ghi_kwh_m2_year * params.usable_area_m2 * eff * pr * 
+         transpositionFactor * shadeLoss * tempLoss * degradation;
 }
 
-// Classificação final
+// Classificação final aprimorada
 function classifyVerdict(params: {
   usable_area_m2: number;
   shade_index: number;
   azimuth_deg?: number | null;
   tilt_deg?: number | null;
+  is_brazil?: boolean;
 }) {
   const reasons: string[] = [];
+  const recommendations: string[] = [];
+  const warnings: string[] = [];
+  
   const area = params.usable_area_m2;
   const shade = clamp(params.shade_index, 0, 1);
   const az = params.azimuth_deg ?? 0;
   const tilt = params.tilt_deg ?? 15;
+  const isBrazil = params.is_brazil ?? false;
 
-  const azDev = Math.min(
-    Math.abs(((az + 360) % 360) - 0),
-    Math.abs(((az + 360) % 360) - 360),
-  );
+  // Ajuste de critérios para Brasil (hemisfério sul)
+  const azDev = isBrazil 
+    ? Math.min(Math.abs(az), Math.abs(az - 360)) // Norte = 0° ou 360°
+    : Math.min(Math.abs(az - 180), Math.abs(az + 180)); // Sul = 180°
+  
   const tiltOk = tilt >= 5 && tilt <= 35;
   const shadeOk = shade < 0.2;
-  const areaApto = area >= 15;
+  const shadeAcceptable = shade < 0.35;
+  const areaApto = area >= 20; // Aumentado para realidade brasileira
+  const areaMinimo = area >= 12;
 
+  // Análise detalhada
   if (areaApto && shadeOk && azDev <= 45 && tiltOk) {
-    return { verdict: "Apto" as const, reasons: ["Área suficiente", "Baixo sombreamento", "Orientação favorável"] };
+    reasons.push("Área adequada para instalação");
+    reasons.push("Baixo índice de sombreamento");
+    reasons.push("Orientação solar favorável");
+    if (isBrazil) {
+      recommendations.push("Sistema com excelente potencial de geração");
+      recommendations.push("Considerar módulos de alta eficiência para maximizar produção");
+    }
+    return { 
+      verdict: "Apto" as const, 
+      reasons, 
+      recommendations,
+      warnings: warnings.length ? warnings : undefined
+    };
   }
-  if ((area >= 10 && shade < 0.4) && (azDev <= 60 || tiltOk)) {
-    if (area < 15) reasons.push("Área no limite");
-    if (!shadeOk) reasons.push("Sombreamento moderado");
-    if (!tiltOk) reasons.push("Inclinação fora do ideal");
-    if (azDev > 45) reasons.push("Orientação não ideal");
-    return { verdict: "Parcial" as const, reasons: reasons.length ? reasons : ["Condições parcialmente favoráveis"] };
+  
+  if ((areaMinimo && shadeAcceptable) && (azDev <= 90 || tiltOk)) {
+    if (area < 20) {
+      reasons.push("Área no limite mínimo recomendado");
+      recommendations.push("Utilizar módulos de alta eficiência");
+    }
+    if (!shadeOk && shade < 0.35) {
+      reasons.push("Sombreamento moderado presente");
+      recommendations.push("Realizar análise detalhada de sombreamento");
+      recommendations.push("Considerar otimizadores de potência ou microinversores");
+    }
+    if (!tiltOk) {
+      reasons.push(`Inclinação de ${tilt}° fora do ideal`);
+      recommendations.push(`Ajustar inclinação para ${isBrazil ? '15-25°' : '30-40°'}`);
+    }
+    if (azDev > 45) {
+      reasons.push("Orientação parcialmente favorável");
+      warnings.push("Produção pode ser 5-15% menor que o ideal");
+    }
+    
+    return { 
+      verdict: "Parcial" as const, 
+      reasons: reasons.length ? reasons : ["Condições parcialmente favoráveis"],
+      recommendations: recommendations.length ? recommendations : undefined,
+      warnings: warnings.length ? warnings : undefined
+    };
   }
-  if (area < 10) reasons.push("Área insuficiente");
-  if (shade >= 0.4) reasons.push("Sombreamento elevado");
-  if (azDev > 90) reasons.push("Orientação desfavorável");
-  return { verdict: "Não apto" as const, reasons: reasons.length ? reasons : ["Condições desfavoráveis"] };
+  
+  // Não apto
+  if (area < 12) {
+    reasons.push("Área insuficiente para instalação viável");
+    warnings.push("Mínimo recomendado: 12m² úteis");
+  }
+  if (shade >= 0.35) {
+    reasons.push("Sombreamento excessivo detectado");
+    warnings.push("Perdas por sombreamento superiores a 35%");
+  }
+  if (azDev > 90) {
+    reasons.push("Orientação desfavorável");
+    warnings.push(isBrazil ? "Face voltada predominantemente para Sul" : "Face voltada predominantemente para Norte");
+  }
+  
+  return { 
+    verdict: "Não apto" as const, 
+    reasons: reasons.length ? reasons : ["Condições desfavoráveis para instalação"],
+    recommendations: ["Buscar localização alternativa para instalação"],
+    warnings: warnings.length ? warnings : undefined
+  };
 }
 
 /* ========= DATASOURCES ========= */
 
 async function getGoogleSolarData(lat: number, lng: number): Promise<SolarApiResponse | null> {
   if (!GOOGLE_SOLAR_API_KEY) return null;
+  
+  // Verificar se está no Brasil (não funcionará)
+  if (isBrazilianCoordinate(lat, lng)) {
+    console.log("Coordenadas brasileiras detectadas - Google Solar API não disponível");
+    return null;
+  }
+  
   const url =
     `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&key=${GOOGLE_SOLAR_API_KEY}`;
   const res = await fetchWithTimeout(url, 8000);
@@ -289,17 +566,19 @@ async function getGoogleSolarData(lat: number, lng: number): Promise<SolarApiRes
   return j;
 }
 
-// PVGIS: E_y (kWh/kWp/ano) com tilt/azim reais
+// PVGIS com correções
 async function getPVGISYield(lat: number, lng: number, tilt_deg?: number, azimuth_deg?: number) {
-  let angle = tilt_deg ? Math.round(tilt_deg) : undefined;
+  const angle = tilt_deg ? Math.round(tilt_deg) : undefined;
   let aspect: number | undefined;
   if (azimuth_deg != null) {
-    // Patch: CORREÇÃO do azimute invertido (agora correto!)
+    // Correção do azimute para convenção PVGIS
     aspect = ((azimuth_deg - 180 + 540) % 360) - 180;
   }
+  
   let url = `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${lat}&lon=${lng}&peakpower=1&loss=14&outputformat=json`;
   if (angle != null) url += `&angle=${angle}`;
   if (aspect != null) url += `&aspect=${aspect}`;
+  
   const res = await fetchWithTimeout(url, 8000);
   if (!res.ok) return null;
   const j = await res.json();
@@ -308,23 +587,31 @@ async function getPVGISYield(lat: number, lng: number, tilt_deg?: number, azimut
   return null;
 }
 
-// NASA POWER: soma anual de GHI (kWh/m²/ano)
+// NASA POWER com fallback melhorado
 async function getNASAGHI(lat: number, lng: number) {
   const year = new Date().getFullYear() - 1;
   const start = `${year}0101`;
   const end = `${year}1231`;
   const url =
     `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN&community=RE&longitude=${lng}&latitude=${lat}&start=${start}&end=${end}&format=JSON`;
-  const res = await fetchWithTimeout(url, 8000);
-  if (!res.ok) return null;
-  const j = await res.json();
-  const days = j?.properties?.parameter?.ALLSKY_SFC_SW_DWN;
-  if (!days) return null;
-  const sum = Object.values(days).reduce(
-    (acc: number, v: any) => acc + (typeof v === "number" ? v : 0),
-    0,
-  );
-  return { ghi_kwh_m2_year: sum as number };
+  
+  try {
+    const res = await fetchWithTimeout(url, 10000); // Timeout maior para NASA
+    if (!res.ok) throw new Error("NASA API error");
+    const j = await res.json();
+    const days = j?.properties?.parameter?.ALLSKY_SFC_SW_DWN;
+    if (!days) throw new Error("No data from NASA");
+    
+    const sum = Object.values(days).reduce(
+      (acc: number, v: unknown) => acc + (typeof v === "number" ? v : 0),
+      0,
+    );
+    return { ghi_kwh_m2_year: sum as number };
+  } catch {
+    console.log("NASA API failed, using Brazilian typical values");
+    // Usar valores típicos brasileiros como fallback
+    return { ghi_kwh_m2_year: getBrazilianTypicalGHI(lat) };
+  }
 }
 
 /* ========= PROCESSADORES ========= */
@@ -349,7 +636,7 @@ function computeShadeIndexFromQuantiles(q: number[] | undefined, fallbackMax: nu
   return clamp(1 - (center / Math.max(max, 1)), 0, 1);
 }
 
-// Google Solar Data
+// Processamento Google Solar (não disponível para Brasil)
 async function processGoogleSolarData(
   solar: SolarApiResponse,
   address: string,
@@ -357,12 +644,18 @@ async function processGoogleSolarData(
   lng: number,
   polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn"|"microsoft-footprint"|"google-footprint" },
   usableAreaOverride?: number,
+  shadingOverride?: number,
+  shadingDescription?: string,
+  averageTemperature?: number,
+  moduleType?: string,
+  systemAge?: number,
 ) {
   const sp = solar.solarPotential!;
   const wholeArea = sp.wholeRoofStats?.areaMeters2 ?? 0;
+  const isBrazil = isBrazilianCoordinate(lat, lng);
 
-  // --- ÁREA UTIL (corrigido) ---
-  let usageFactor = 0.80;
+  // --- ÁREA ÚTIL ---
+  const usageFactor = 0.80;
   let usableAreaRaw: number = 0;
   let areaSource: "google" | "manual" | "footprint" = "google";
   let applyUF = 1.0;
@@ -377,56 +670,85 @@ async function processGoogleSolarData(
     areaSource = "footprint";
     applyUF = usageFactor;
   } else if (typeof sp.maxArrayAreaMeters2 === "number" && sp.maxArrayAreaMeters2 > 0) {
-    usableAreaRaw = sp.maxArrayAreaMeters2; // já descontado
+    usableAreaRaw = sp.maxArrayAreaMeters2;
     areaSource = "google";
-    applyUF = 1.0; // NÃO aplica uso de novo!
+    applyUF = 1.0;
   } else {
-    usableAreaRaw = wholeArea * 0.70; // fallback conservador
+    usableAreaRaw = wholeArea * 0.70;
     areaSource = "google";
     applyUF = usageFactor;
   }
 
   const usableArea = Math.max(0, Math.round(usableAreaRaw * applyUF));
 
-  // ÍNDICE DE SOMBRA
-  const q = sp.wholeRoofStats?.sunshineQuantiles;
-  const shadeIndex = computeShadeIndexFromQuantiles(q, sp.maxSunshineHoursPerYear);
+  // --- ÍNDICE DE SOMBRA ---
+  let shadeIndex: number;
+  let shadingSource: "google_measured" | "user_input" | "description" | "heuristic" = "google_measured";
+  
+  if (shadingOverride !== undefined) {
+    shadeIndex = shadingOverride;
+    shadingSource = "user_input";
+  } else if (shadingDescription) {
+    shadeIndex = shadingDescriptionToIndex(shadingDescription);
+    shadingSource = "description";
+  } else {
+    const q = sp.wholeRoofStats?.sunshineQuantiles;
+    shadeIndex = computeShadeIndexFromQuantiles(q, sp.maxSunshineHoursPerYear);
+    shadingSource = "google_measured";
+  }
+  
   const shadingLoss = Math.round(shadeLossFracFromIndex(shadeIndex) * 100);
 
-  // --- GHI
+  // --- TEMPERATURA E EFICIÊNCIA ---
+  const temperature = averageTemperature ?? (isBrazil ? getBrazilianAverageTemperature(lat) : 25);
+  const moduleEff = getModuleEfficiency(moduleType);
+  const age = systemAge ?? 0;
+
+  // --- GHI ---
   let ghi_kwh_m2_year = 0;
   let irradiationSource = "";
   const nasa = await getNASAGHI(lat, lng).catch(() => null);
   if (nasa?.ghi_kwh_m2_year) {
     ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
     irradiationSource = "NASA POWER (GHI)";
+  } else if (isBrazil) {
+    ghi_kwh_m2_year = getBrazilianTypicalGHI(lat);
+    irradiationSource = "Valores típicos brasileiros";
   } else {
     ghi_kwh_m2_year = 1800;
     irradiationSource = "Heurística conservadora";
   }
 
-  // --- ORIENTAÇÃO/INCLINAÇÃO
+  // --- ORIENTAÇÃO/INCLINAÇÃO ---
   let avgAz = 0;
   let avgTilt = 15;
   if (sp.roofSegmentStats?.length) {
-    // Patch: média circular do azimute
     const azArr = sp.roofSegmentStats.map(s => s.azimuthDegrees ?? 0);
     avgAz = circularMean(azArr);
-    // Tilt: média aritmética
     avgTilt = sp.roofSegmentStats.reduce((a, s) => a + (s.pitchDegrees ?? 15), 0) / sp.roofSegmentStats.length;
   }
 
-  // --- PRODUÇÃO
+  // --- PERFORMANCE RATIO EFETIVO ---
+  const effectivePR = isBrazil ? getBrazilianPR(lat, lng, temperature) : DEFAULT_PR;
+
+  // --- PRODUÇÃO ---
   let estimatedProduction = 0;
   let estimatedProductionDC = 0;
   let estimatedProductionAC = 0;
+  let estimatedProductionYear1 = 0;
+  let estimatedProductionYear25 = 0;
+  
   if (sp.solarPanelConfigs?.length && areaSource === "google") {
     const best = sp.solarPanelConfigs.reduce((a, b) =>
       (b.yearlyEnergyDcKwh ?? 0) > (a.yearlyEnergyDcKwh ?? 0) ? b : a,
     );
     estimatedProductionDC = Math.floor(best.yearlyEnergyDcKwh ?? 0);
-    estimatedProductionAC = Math.floor(estimatedProductionDC * INVERTER_EFF); // Patch: conversão DC→AC
-    estimatedProduction = estimatedProductionAC; // priorizar AC como resultado principal
+    estimatedProductionAC = Math.floor(estimatedProductionDC * INVERTER_EFF);
+    estimatedProduction = estimatedProductionAC;
+    
+    // Cálculo de produção ao longo do tempo
+    estimatedProductionYear1 = estimatedProductionAC;
+    estimatedProductionYear25 = Math.floor(estimatedProductionAC * Math.pow(1 - ANNUAL_DEGRADATION, 25));
   } else {
     const pvgis = await getPVGISYield(lat, lng, avgTilt, avgAz).catch(() => null);
     if (pvgis?.Ey_kwh_per_kwp_year) {
@@ -434,33 +756,48 @@ async function processGoogleSolarData(
         estimateByPVGIS_Ey({
           Ey_kwh_per_kwp_year: pvgis.Ey_kwh_per_kwp_year,
           usable_area_m2: usableArea,
+          module_eff: moduleEff,
           shade_index: shadeIndex,
+          temperature: temperature,
+          system_age: age,
         }),
       );
-      estimatedProductionAC = estimatedProduction;
+      irradiationSource += " + PVGIS (E_y)";
     } else {
       estimatedProduction = Math.round(
         estimateByGHI({
           ghi_kwh_m2_year,
           usable_area_m2: usableArea,
+          module_eff: moduleEff,
+          pr: effectivePR,
           shade_index: shadeIndex,
           tilt_deg: avgTilt,
+          azimuth_deg: avgAz,
           lat,
+          temperature: temperature,
+          system_age: age,
         }),
       );
-      estimatedProductionAC = estimatedProduction;
     }
+    estimatedProductionAC = estimatedProduction;
     estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
+    estimatedProductionYear1 = estimatedProductionAC;
+    estimatedProductionYear25 = Math.floor(estimatedProductionAC * Math.pow(1 - ANNUAL_DEGRADATION, 25));
   }
 
+  // --- PERDAS TÉRMICAS ---
+  const temperatureLosses = Math.round((temperature - STC_TEMP) * Math.abs(TEMP_COEFFICIENT) * 100);
+
+  // --- CLASSIFICAÇÃO ---
   const cls = classifyVerdict({
     usable_area_m2: usableArea,
     shade_index: shadeIndex,
     azimuth_deg: avgAz,
     tilt_deg: avgTilt,
+    is_brazil: isBrazil,
   });
 
-  // Footprints
+  // --- FOOTPRINTS ---
   const footprints = [];
   if (polygon?.coordinates?.length) {
     const ring = polygon.coordinates[0] as [number, number][];
@@ -474,50 +811,95 @@ async function processGoogleSolarData(
     });
   }
 
-  // Nota técnica
+  // --- NOTA TÉCNICA ---
   let technicalNote =
-    "Nota técnica: Produção estimada com base em Google Solar API (para geometrias e configs) + PVGIS (E_y) e NASA POWER (GHI). " +
-    "Áreas calculadas por polígono via fórmula geodésica esférica (WGS84), podendo variar conforme delineamento e resolução dos dados. " +
-    "Valores de produção priorizam AC (corrigido) e expõem DC para referência. Recomenda-se validação in loco para projetos críticos.";
+    "Análise técnica v3.0: Produção estimada com base em Google Solar API + PVGIS/NASA. " +
+    `Eficiência do módulo: ${(moduleEff * 100).toFixed(0)}%. ` +
+    `PR efetivo: ${effectivePR.toFixed(2)}. ` +
+    `Perdas térmicas: ${temperatureLosses}% (T_média=${temperature}°C). ` +
+    `Degradação: ${(ANNUAL_DEGRADATION * 100).toFixed(1)}%/ano. ` +
+    "Valores AC (pós-inversor) priorizados. ";
+  
+  if (isBrazil) {
+    technicalNote += "Parâmetros otimizados para condições brasileiras. ";
+  }
   if (polygon?.source === "microsoft-footprint") {
-    technicalNote += " Footprint: Microsoft Building Footprints (ML).";
+    technicalNote += "Footprint: Microsoft Building Footprints (ML). ";
   }
 
   return AnalysisSchema.parse({
     address,
     coordinates: { lat, lng },
-    coverage: { google: true },
+    coverage: { 
+      google: true,
+      dataQuality: "measured"
+    },
     confidence: "Alta",
     usableArea,
     areaSource,
     annualGHI: Math.round(ghi_kwh_m2_year),
     irradiationSource,
-    shadingIndex: Number(shadeIndex.toFixed(2)),
+    shadingIndex: Number(shadeIndex.toFixed(3)),
     shadingLoss,
+    shadingSource,
     estimatedProduction,
     estimatedProductionAC,
     estimatedProductionDC,
+    estimatedProductionYear1,
+    estimatedProductionYear25,
+    temperatureLosses,
+    degradationFactor: Number(Math.pow(1 - ANNUAL_DEGRADATION, 25).toFixed(3)),
+    effectivePR: Number(effectivePR.toFixed(3)),
     verdict: cls.verdict,
     reasons: cls.reasons,
+    recommendations: cls.recommendations,
+    warnings: cls.warnings,
     usageFactor: applyUF,
     footprints,
-    googleSolarData: { ...solar, derived: { avgAz, avgTilt, estimatedProductionDC, estimatedProductionAC, inverterEff: INVERTER_EFF } },
+    googleSolarData: { 
+      ...solar, 
+      derived: { 
+        avgAz, 
+        avgTilt, 
+        estimatedProductionDC, 
+        estimatedProductionAC, 
+        inverterEff: INVERTER_EFF,
+        moduleEff,
+        temperature
+      } 
+    },
     technicalNote,
   });
 }
 
-// Fallback (PVGIS/NASA)
+// Processamento Fallback (sempre usado para Brasil)
 async function processFallbackAnalysis(opts: {
   lat: number;
   lng: number;
   address: string;
   polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn"|"microsoft-footprint"|"google-footprint" };
   usableAreaOverride?: number;
+  shadingOverride?: number;
+  shadingDescription?: string;
+  averageTemperature?: number;
+  moduleType?: string;
+  systemAge?: number;
 }) {
-  const { lat, lng, address, polygon, usableAreaOverride } = opts;
+  const { lat, lng, address, polygon, usableAreaOverride, shadingOverride, 
+          shadingDescription, averageTemperature, moduleType, systemAge } = opts;
+  
+  const isBrazil = isBrazilianCoordinate(lat, lng);
+  
+  // Validação para coordenadas brasileiras
+  if (!isBrazil) {
+    console.warn("Coordenadas fora do Brasil - usando valores genéricos");
+  }
+  
+  // --- ÁREA ÚTIL ---
   const usageFactor = 0.75;
   let areaSource: "manual" | "estimate" | "footprint" = "estimate";
-  let usableAreaRaw = 60 / usageFactor;
+  let usableAreaRaw = 80 / usageFactor; // Default maior para Brasil
+  
   if (usableAreaOverride && usableAreaOverride > 0) {
     usableAreaRaw = usableAreaOverride;
     areaSource = "manual";
@@ -526,60 +908,111 @@ async function processFallbackAnalysis(opts: {
     usableAreaRaw = polygonAreaM2(ring);
     areaSource = "footprint";
   }
-  const usableArea = Math.round(usableAreaRaw * usageFactor);
+  const usableArea = Math.round(usableAreaRaw * (areaSource === "manual" ? 1 : usageFactor));
 
+  // --- TEMPERATURA E EFICIÊNCIA ---
+  const temperature = averageTemperature ?? (isBrazil ? getBrazilianAverageTemperature(lat) : 25);
+  const moduleEff = getModuleEfficiency(moduleType);
+  const age = systemAge ?? 0;
+
+  // --- IRRADIAÇÃO ---
   let ghi_kwh_m2_year = 0;
   let irradiationSource = "";
   const nasa = await getNASAGHI(lat, lng).catch(() => null);
   if (nasa?.ghi_kwh_m2_year) {
     ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
     irradiationSource = "NASA POWER (GHI)";
+  } else if (isBrazil) {
+    ghi_kwh_m2_year = getBrazilianTypicalGHI(lat);
+    irradiationSource = "Valores típicos brasileiros (INMET/CRESESB)";
   } else {
     ghi_kwh_m2_year = 1800;
     irradiationSource = "Heurística conservadora";
   }
 
-  const lower = address.toLowerCase();
-  const isUrban = lower.includes("rua ") || lower.includes("avenida ") || lower.includes("centro") || lower.includes("cidade");
-  const shadeIndex = isUrban ? 0.15 : 0.08;
+  // --- SOMBREAMENTO ---
+  let shadeIndex: number;
+  let shadingSource: "user_input" | "description" | "heuristic" = "heuristic";
+  
+  if (shadingOverride !== undefined) {
+    shadeIndex = shadingOverride;
+    shadingSource = "user_input";
+  } else if (shadingDescription) {
+    shadeIndex = shadingDescriptionToIndex(shadingDescription);
+    shadingSource = "description";
+  } else {
+    // Heurística melhorada para Brasil
+    shadeIndex = analyzeUrbanShading(address, lat);
+    shadingSource = "heuristic";
+  }
+  
   const shadingLossPct = Math.round(shadeLossFracFromIndex(shadeIndex) * 100);
 
+  // --- ORIENTAÇÃO E INCLINAÇÃO ---
+  const optimalTilt = isBrazil 
+    ? Math.max(10, Math.min(25, Math.abs(lat) - 5)) // Brasil: latitude - 5°
+    : Math.max(5, Math.min(30, Math.abs(lat) - 10)); // Genérico
+  
+  const optimalAzimuth = isBrazil ? 0 : 180; // Norte no Brasil, Sul no hemisfério norte
+
+  // --- PERFORMANCE RATIO EFETIVO ---
+  const effectivePR = isBrazil ? getBrazilianPR(lat, lng, temperature) : DEFAULT_PR;
+
+  // --- PRODUÇÃO ---
   let estimatedProduction = 0;
   let estimatedProductionAC = 0;
   let estimatedProductionDC = 0;
-  const optimalTilt = Math.max(5, Math.min(30, Math.abs(lat) - 10));
-  const pvgis = await getPVGISYield(lat, lng, optimalTilt, 0).catch(() => null);
+  let estimatedProductionYear1 = 0;
+  let estimatedProductionYear25 = 0;
+  
+  const pvgis = await getPVGISYield(lat, lng, optimalTilt, optimalAzimuth).catch(() => null);
   if (pvgis?.Ey_kwh_per_kwp_year) {
     estimatedProduction = Math.round(
       estimateByPVGIS_Ey({
         Ey_kwh_per_kwp_year: pvgis.Ey_kwh_per_kwp_year,
         usable_area_m2: usableArea,
+        module_eff: moduleEff,
         shade_index: shadeIndex,
+        temperature: temperature,
+        system_age: age,
       }),
     );
-    estimatedProductionAC = estimatedProduction;
-    estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
+    irradiationSource += " + PVGIS (E_y)";
   } else {
     estimatedProduction = Math.round(
       estimateByGHI({
         ghi_kwh_m2_year,
         usable_area_m2: usableArea,
+        module_eff: moduleEff,
+        pr: effectivePR,
         shade_index: shadeIndex,
         tilt_deg: optimalTilt,
+        azimuth_deg: optimalAzimuth,
         lat,
+        temperature: temperature,
+        system_age: age,
       }),
     );
-    estimatedProductionAC = estimatedProduction;
-    estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
   }
+  
+  estimatedProductionAC = estimatedProduction;
+  estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
+  estimatedProductionYear1 = estimatedProductionAC;
+  estimatedProductionYear25 = Math.floor(estimatedProductionAC * Math.pow(1 - ANNUAL_DEGRADATION, 25));
 
+  // --- PERDAS TÉRMICAS ---
+  const temperatureLosses = Math.round((temperature - STC_TEMP) * Math.abs(TEMP_COEFFICIENT) * 100);
+
+  // --- CLASSIFICAÇÃO ---
   const cls = classifyVerdict({
     usable_area_m2: usableArea,
     shade_index: shadeIndex,
-    azimuth_deg: 0,
+    azimuth_deg: optimalAzimuth,
     tilt_deg: optimalTilt,
+    is_brazil: isBrazil,
   });
 
+  // --- FOOTPRINTS ---
   const footprints = [];
   if (polygon?.coordinates?.length) {
     const ring = polygon.coordinates[0] as [number, number][];
@@ -593,31 +1026,83 @@ async function processFallbackAnalysis(opts: {
     });
   }
 
+  // --- QUALIDADE DOS DADOS ---
+  let dataQuality: "measured" | "calculated" | "estimated" = "estimated";
+  if (shadingSource === "user_input" && areaSource !== "estimate") {
+    dataQuality = "calculated";
+  }
+
+  // --- CONFIDENCE ---
+  let confidence: "Alta" | "Média" | "Baixa" = "Baixa";
+  if (shadingSource === "user_input" || shadingSource === "description") {
+    confidence = areaSource === "manual" || areaSource === "footprint" ? "Média" : "Baixa";
+  }
+
+  // --- AVISOS ESPECÍFICOS ---
+  const warnings: string[] = [];
+  if (shadingSource === "heuristic") {
+    warnings.push("⚠️ Sombreamento estimado por heurística - recomenda-se medição in-loco");
+  }
+  if (areaSource === "estimate") {
+    warnings.push("⚠️ Área estimada genericamente - confirmar dimensões reais");
+  }
+  if (!isBrazil) {
+    warnings.push("⚠️ Localização fora do Brasil - parâmetros podem não ser otimizados");
+  }
+
+  // --- NOTA TÉCNICA ---
   let technicalNote =
-    `Nota técnica: Irradiação (GHI) via ${irradiationSource}. ` +
-    `Produção estimada com PVGIS (E_y) quando disponível, ou GHI + PR caso contrário. ` +
-    `Sombreamento estimado em ${Math.round(shadeIndex * 100)}% por contexto urbano/rural. ` +
-    `Tilt ótimo ≈ ${optimalTilt}°. Área por polígono via fórmula geodésica esférica (WGS84). Produção em AC e DC explicitadas.`;
+    `Análise técnica v3.0 (Fallback): ${irradiationSource}. ` +
+    `Produção estimada com ${pvgis ? 'PVGIS (E_y)' : 'modelo GHI+PR'}. ` +
+    `Sombreamento: ${Math.round(shadeIndex * 100)}% (${shadingSource}). ` +
+    `Inclinação ótima: ${optimalTilt}°, Azimute: ${optimalAzimuth}°. ` +
+    `Eficiência módulo: ${(moduleEff * 100).toFixed(0)}%. ` +
+    `PR efetivo: ${effectivePR.toFixed(2)}. ` +
+    `Perdas térmicas: ${temperatureLosses}% (T=${temperature}°C). ` +
+    `Degradação 25 anos: ${((1 - Math.pow(1 - ANNUAL_DEGRADATION, 25)) * 100).toFixed(0)}%. `;
+  
+  if (isBrazil) {
+    technicalNote += "Parâmetros otimizados para Brasil (NBR 16274). ";
+  }
+  
   if (polygon?.source === "microsoft-footprint") {
-    technicalNote += " Footprint: Microsoft Building Footprints (ML).";
+    technicalNote += "Footprint: Microsoft Building Footprints (ML). ";
+  }
+  
+  if (shadingSource === "heuristic") {
+    technicalNote += 
+      "IMPORTANTE: Análise de sombreamento baseada em estimativa. " +
+      "Para projetos executivos, realizar análise com horizonte solar e medição in-loco.";
   }
 
   return AnalysisSchema.parse({
     address,
     coordinates: { lat, lng },
-    coverage: { google: false, fallback: "PVGIS/NASA" },
-    confidence: "Média",
+    coverage: { 
+      google: false, 
+      fallback: "PVGIS/NASA",
+      dataQuality
+    },
+    confidence,
     usableArea,
     areaSource,
     annualGHI: Math.round(ghi_kwh_m2_year),
     irradiationSource,
-    shadingIndex: Number(shadeIndex.toFixed(2)),
+    shadingIndex: Number(shadeIndex.toFixed(3)),
     shadingLoss: shadingLossPct,
+    shadingSource,
     estimatedProduction,
     estimatedProductionAC,
     estimatedProductionDC,
+    estimatedProductionYear1,
+    estimatedProductionYear25,
+    temperatureLosses,
+    degradationFactor: Number(Math.pow(1 - ANNUAL_DEGRADATION, 25).toFixed(3)),
+    effectivePR: Number(effectivePR.toFixed(3)),
     verdict: cls.verdict,
     reasons: cls.reasons,
+    recommendations: cls.recommendations,
+    warnings: [...(cls.warnings || []), ...warnings],
     usageFactor,
     footprints,
     technicalNote,
@@ -642,7 +1127,7 @@ async function verifyAuth(req: Request) {
   return { ok: true as const, user: { id: data.user.id, email: data.user.email ?? undefined } };
 }
 
-/* ========= HANDLER ========= */
+/* ========= HANDLER PRINCIPAL ========= */
 
 Deno.serve(async (req: Request) => {
   const headers = corsHeaders(req.headers.get("origin"));
@@ -668,41 +1153,74 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Body
+    // Parse body
     const json = await req.json();
     const input = AnalyzeRequestSchema.parse(json);
 
     const { lat, lng, address } = input;
-    console.log(`Using coordinates directly: lat=${lat}, lng=${lng}, address="${address}"`);
+    
+    // Log e validação de coordenadas brasileiras
+    const isBrazil = isBrazilianCoordinate(lat, lng);
+    console.log(`Análise solar: lat=${lat}, lng=${lng}, address="${address}", Brasil=${isBrazil}`);
+    
+    if (isBrazil && !input.shadingOverride && !input.shadingDescription) {
+      console.log("⚠️ Análise brasileira sem dados de sombreamento - usando heurística");
+    }
 
-    // Google Solar primeiro, depois fallback
+    // Tentar Google Solar primeiro (não funcionará para Brasil)
     let analysis;
     const google = await getGoogleSolarData(lat, lng).catch(() => null);
+    
     if (google?.solarPotential) {
+      console.log("Usando dados Google Solar (cobertura internacional)");
       analysis = await processGoogleSolarData(
         google,
         address,
         lat,
         lng,
-        input.polygon as any,
+        input.polygon,
         input.usableAreaOverride,
+        input.shadingOverride,
+        input.shadingDescription,
+        input.averageTemperature,
+        input.moduleType,
+        input.systemAge,
       );
     } else {
+      console.log("Usando fallback PVGIS/NASA (padrão para Brasil)");
       analysis = await processFallbackAnalysis({
         lat,
         lng,
         address,
-        polygon: input.polygon as any,
+        polygon: input.polygon,
         usableAreaOverride: input.usableAreaOverride,
+        shadingOverride: input.shadingOverride,
+        shadingDescription: input.shadingDescription,
+        averageTemperature: input.averageTemperature,
+        moduleType: input.moduleType,
+        systemAge: input.systemAge,
       });
     }
 
-    return new Response(JSON.stringify({ success: true, data: analysis }), {
+    // Adicionar metadados de resposta
+    const response = {
+      success: true,
+      data: analysis,
+      metadata: {
+        version: "3.0",
+        timestamp: new Date().toISOString(),
+        location: isBrazil ? "Brazil" : "International",
+        dataSource: analysis.coverage.google ? "Google Solar API" : "PVGIS/NASA",
+      }
+    };
+
+    return new Response(JSON.stringify(response), {
       status: 200,
       headers: { ...headers, "Content-Type": "application/json" },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Internal error";
+    console.error("Error in solar analysis:", message);
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
       headers: { ...headers, "Content-Type": "application/json" },

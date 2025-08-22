@@ -3,7 +3,7 @@
 
 /// <reference lib="dom" />
 
-// @ts-ignore Deno types no edge
+// @ts-expect-error Deno types no edge
 declare const Deno: {
   env: { get(k: string): string | undefined };
   serve(h: (r: Request) => Response | Promise<Response>): void;
@@ -31,19 +31,36 @@ const SaveAnalysisRequestSchema = z.object({
     coverage: z.object({
       google: z.boolean(),
       fallback: z.string().optional(),
+      dataQuality: z.enum(["measured", "calculated", "estimated"]).optional(),
     }),
     confidence: z.enum(["Alta", "Média", "Baixa"]),
     usableArea: z.number(),
     areaSource: z.enum(["google", "estimate", "footprint", "manual"]),
     annualIrradiation: z.number(),
+    shadingSource: z.enum(["google_measured", "user_input", "description", "heuristic"]).optional(),
     irradiationSource: z.string(),
     shadingIndex: z.number(),
     shadingLoss: z.number(),
     estimatedProduction: z.number(),
+    estimatedProductionAC: z.number().optional(),
+    estimatedProductionDC: z.number().optional(),
+    estimatedProductionYear1: z.number().optional(),
+    estimatedProductionYear25: z.number().optional(),
+    temperatureLosses: z.number().optional(),
+    degradationFactor: z.number().optional(),
+    effectivePR: z.number().optional(),
     verdict: z.enum(["Apto", "Parcial", "Não apto"]),
     reasons: z.array(z.string()),
+    recommendations: z.array(z.string()).optional(),
+    warnings: z.array(z.string()).optional(),
     usageFactor: z.number(),
-    footprints: z.array(z.any()),
+    footprints: z.array(z.object({
+      id: z.string(),
+      coordinates: z.array(z.tuple([z.number(), z.number()])),
+      area: z.number(),
+      isActive: z.boolean(),
+      source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
+    })),
     googleSolarData: z.any().optional(),
     technicalNote: z.string().optional(),
     // Optional fields that may be present
@@ -81,9 +98,19 @@ async function saveAnalysisToDatabase(analysisData: any, userId: string, supabas
       irradiation_source: analysisData.irradiationSource,
       shading_index: analysisData.shadingIndex,
       shading_loss: analysisData.shadingLoss,
+      shading_source: analysisData.shadingSource,
       estimated_production: analysisData.estimatedProduction,
+      estimated_production_ac: analysisData.estimatedProductionAC,
+      estimated_production_dc: analysisData.estimatedProductionDC,
+      estimated_production_year1: analysisData.estimatedProductionYear1,
+      estimated_production_year25: analysisData.estimatedProductionYear25,
+      temperature_losses: analysisData.temperatureLosses,
+      degradation_factor: analysisData.degradationFactor,
+      effective_pr: analysisData.effectivePR,
       verdict: analysisData.verdict,
       reasons: analysisData.reasons,
+      recommendations: analysisData.recommendations,
+      warnings: analysisData.warnings,
       usage_factor: analysisData.usageFactor,
       footprints: analysisData.footprints,
       google_solar_data: analysisData.googleSolarData,

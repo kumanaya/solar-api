@@ -64,6 +64,8 @@ export function ActionButtons() {
 
     try {
       console.log('Saving analysis to database...');
+      console.log('Analysis data before saving:', JSON.stringify(data, null, 2));
+      console.log('annualIrradiation field value:', data.annualIrradiation);
       
       const supabase = createClient();
       const { data: saveResult, error } = await supabase.functions.invoke('save-analysis', {
@@ -148,6 +150,30 @@ export function ActionButtons() {
           
           const locationSource = data.address.includes(',') && data.address.includes('.') ? 'pin' : 'endereço';
           alert(`Footprint encontrado usando ${locationSource}! Área: ${footprintData.area}m² (${footprintData.source})`);
+          
+          // Update session storage with footprint polygon
+          try {
+            const PIN_STORAGE_KEY = 'lumionfy-pin-data';
+            const currentStoredData = sessionStorage.getItem(PIN_STORAGE_KEY);
+            if (currentStoredData && data.coordinates) {
+              const storedData = JSON.parse(currentStoredData);
+              const polygonData = {
+                type: "Polygon" as const,
+                coordinates: [footprintData.coordinates.map(coord => [coord[0], coord[1]])],
+                source: footprintData.source
+              };
+              const updatedData = {
+                ...storedData,
+                coordinates: [data.coordinates[0], data.coordinates[1]],
+                address: data.address,
+                polygon: polygonData,
+                timestamp: Date.now()
+              };
+              sessionStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(updatedData));
+            }
+          } catch (error) {
+            console.error('Error updating session storage with footprint:', error);
+          }
         } else {
           // Footprint data returned but no valid footprint - user must draw manually
           // Don't set hasFootprintFromAction - force manual drawing
@@ -311,6 +337,7 @@ export function ActionButtons() {
       }
       
       console.log('Analysis completed successfully:', transformedData);
+      console.log('transformedData.annualIrradiation:', transformedData.annualIrradiation);
       
       // Show analysis ID if saved to database
       if (transformedData.id) {
@@ -328,6 +355,25 @@ export function ActionButtons() {
       
       // Mark that we have analysis results to show the technical results
       setHasAnalysisResults(true);
+      
+      // Update session storage with polygon data
+      try {
+        const PIN_STORAGE_KEY = 'lumionfy-pin-data';
+        const currentStoredData = sessionStorage.getItem(PIN_STORAGE_KEY);
+        if (currentStoredData && currentCoordinates) {
+          const storedData = JSON.parse(currentStoredData);
+          const updatedData = {
+            ...storedData,
+            coordinates: [currentCoordinates[0], currentCoordinates[1]],
+            address: transformedData.address,
+            polygon: polygonToSend,
+            timestamp: Date.now()
+          };
+          sessionStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(updatedData));
+        }
+      } catch (error) {
+        console.error('Error updating session storage:', error);
+      }
       
     } catch (error) {
       console.error('Analysis error:', error);

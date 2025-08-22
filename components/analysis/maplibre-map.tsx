@@ -87,7 +87,6 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     isUserPlaced: boolean;
   } | null>(null);
   const [currentDataLayer, setCurrentDataLayer] = useState<string | null>(null);
-  currentDataLayer; // Used implicitly
   
   // Polygon drawing state (back to local state)
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
@@ -96,11 +95,12 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   const PIN_STORAGE_KEY = 'lumionfy-pin-data';
 
   // Functions to manage pin data in session storage
-  const savePinToStorage = (coordinates: [number, number], address: string) => {
+  const savePinToStorage = (coordinates: [number, number], address: string, polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" }) => {
     try {
       const pinData = {
         coordinates,
         address,
+        polygon: polygon || currentPolygon,
         timestamp: Date.now()
       };
       sessionStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinData));
@@ -581,14 +581,49 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         isUserPlaced: true
       });
       
+      // Restore polygon if available
+      if (savedPin.polygon) {
+        setCurrentPolygon(savedPin.polygon);
+        
+        // Visualize the restored polygon on the map
+        const polygonCoords = savedPin.polygon.coordinates[0];
+        if (polygonCoords && polygonCoords.length > 0) {
+          // Convert to [lng, lat] format and calculate area
+          const coords = polygonCoords.map(coord => [coord[0], coord[1]] as [number, number]);
+          const area = calculatePolygonArea(coords);
+          addFinishedPolygonVisualization(coords, Math.round(area));
+        }
+      }
+      
       // Update context data for analysis to work
-      updateData({
+      const contextData: any = {
         address: savedPin.address,
         coordinates: [lng, lat] as [number, number],
         footprints: [],
         usableArea: 0,
         areaSource: 'manual' as const
-      });
+      };
+      
+      // If we have polygon data, create footprint from it
+      if (savedPin.polygon) {
+        const polygonCoords = savedPin.polygon.coordinates[0];
+        if (polygonCoords && polygonCoords.length > 0) {
+          const coords = polygonCoords.map(coord => [coord[0], coord[1]] as [number, number]);
+          const area = calculatePolygonArea(coords);
+          
+          contextData.footprints = [{
+            id: 'restored-polygon',
+            coordinates: coords,
+            area: Math.round(area),
+            isActive: true,
+            source: savedPin.polygon.source || 'user-drawn'
+          }];
+          contextData.usableArea = Math.round(area * 0.75);
+          contextData.areaSource = savedPin.polygon.source === 'user-drawn' ? 'manual' : 'footprint';
+        }
+      }
+      
+      updateData(contextData);
       
       // Set selected address for analysis button to work
       setSelectedAddress(savedPin.address);
@@ -793,11 +828,21 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       setHasFootprintFromAction(true);
       
       // Set polygon for analysis API (coordinates are already in [lng,lat] format)
-      setCurrentPolygon({
-        type: "Polygon",
+      const userPolygon = {
+        type: "Polygon" as const,
         coordinates: [closedCoords],
-        source: "user-drawn"
-      });
+        source: "user-drawn" as const
+      };
+      setCurrentPolygon(userPolygon);
+      
+      // Update session storage with user-drawn polygon
+      if (currentPin) {
+        savePinToStorage(
+          currentPin.coordinates,
+          currentPin.address,
+          userPolygon
+        );
+      }
       
       // Clear drawing visualization
       clearDrawingVisualization();
