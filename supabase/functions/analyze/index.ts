@@ -21,14 +21,14 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 /* ========= SCHEMAS ========= */
 const AnalyzeRequestSchema = z.object({
   address: z.string().min(5),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
   usableAreaOverride: z.number().positive().optional(), // m²
-  polygon: z
-    .object({
-      type: z.literal("Polygon"),
-      coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))), // [lng,lat]
-      source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
-    })
-    .optional(),
+  polygon: z.object({
+    type: z.literal("Polygon"),
+    coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))), // [lng,lat]
+    source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
+  }), // Now required, not optional
 });
 
 const AnalysisSchema = z.object({
@@ -487,54 +487,8 @@ async function processFallbackAnalysis(opts: {
   });
 }
 
-/* ========= DATABASE ========= */
-
-async function saveAnalysisToDatabase(analysisData: any, userId: string, supabase: any) {
-  try {
-    console.log('Attempting to save analysis for user:', userId);
-    console.log('Analysis data keys:', Object.keys(analysisData));
-    
-    const insertData = {
-      user_id: userId,
-      address: analysisData.address,
-      coordinates: analysisData.coordinates,
-      coverage: analysisData.coverage,
-      confidence: analysisData.confidence,
-      usable_area: analysisData.usableArea,
-      area_source: analysisData.areaSource,
-      annual_irradiation: analysisData.annualIrradiation,
-      irradiation_source: analysisData.irradiationSource,
-      shading_index: analysisData.shadingIndex,
-      shading_loss: analysisData.shadingLoss,
-      estimated_production: analysisData.estimatedProduction,
-      verdict: analysisData.verdict,
-      reasons: analysisData.reasons,
-      usage_factor: analysisData.usageFactor,
-      footprints: analysisData.footprints,
-      google_solar_data: analysisData.googleSolarData,
-      technical_note: analysisData.technicalNote
-    };
-    
-    console.log('Insert data prepared:', JSON.stringify(insertData, null, 2));
-
-    const { data, error } = await supabase
-      .from('analyses')
-      .insert(insertData)
-      .select('id, created_at')
-      .single();
-
-    if (error) {
-      console.error('Database save error:', JSON.stringify(error, null, 2));
-      return null;
-    }
-
-    console.log('Analysis saved successfully:', data);
-    return { id: data.id, createdAt: data.created_at };
-  } catch (error) {
-    console.error('Database save exception:', error);
-    return null;
-  }
-}
+/* ========= DATABASE REMOVED ========= */
+// Database saving logic moved to separate /save-analysis edge function
 
 /* ========= AUTH ========= */
 
@@ -585,16 +539,9 @@ Deno.serve(async (req: Request) => {
     const json = await req.json();
     const input = AnalyzeRequestSchema.parse(json);
 
-    // 1) Geocode
-    const geo = await geocodeAddress(input.address);
-    if (!geo) {
-      return new Response(JSON.stringify({ success: false, error: "Could not geocode address" }), {
-        status: 400,
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
-    }
-
-    const { lat, lng, formatted } = geo;
+    // 1) Use coordinates sent directly (no geocoding needed)
+    const { lat, lng, address } = input;
+    console.log(`Using coordinates directly: lat=${lat}, lng=${lng}, address="${address}"`);
 
     // 2) Google Solar (se disponível)
     let analysis;
@@ -602,7 +549,7 @@ Deno.serve(async (req: Request) => {
     if (google?.solarPotential) {
       analysis = processGoogleSolarData(
         google,
-        formatted,
+        address,
         lat,
         lng,
         input.polygon as any,
@@ -612,34 +559,13 @@ Deno.serve(async (req: Request) => {
       analysis = await processFallbackAnalysis({
         lat,
         lng,
-        address: formatted,
+        address,
         polygon: input.polygon as any,
         usableAreaOverride: input.usableAreaOverride,
       });
     }
 
-    // 3) Save to database with authenticated user context
-    const authHeader = req.headers.get("Authorization");
-    const token = authHeader?.replace("Bearer ", "");
-    
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    
-    // Set the session with the user's JWT token
-    if (token) {
-      await supabase.auth.setSession({
-        access_token: token,
-        refresh_token: '' // Not needed for this operation
-      });
-    }
-    
-    const savedResult = await saveAnalysisToDatabase(analysis, auth.user.id, supabase);
-    
-    // Add database info to response
-    if (savedResult) {
-      analysis.id = savedResult.id;
-      analysis.createdAt = savedResult.createdAt;
-    }
-
+    // 3) Return analysis data (without saving to database)
     return new Response(JSON.stringify({ success: true, data: analysis }), {
       status: 200,
       headers: { ...headers, "Content-Type": "application/json" },

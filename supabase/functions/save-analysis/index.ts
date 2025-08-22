@@ -1,0 +1,225 @@
+// Edge Function – Save Analysis to Database
+// Separates the saving logic from the analysis computation
+
+/// <reference lib="dom" />
+
+// @ts-ignore Deno types no edge
+declare const Deno: {
+  env: { get(k: string): string | undefined };
+  serve(h: (r: Request) => Response | Promise<Response>): void;
+};
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.43.5";
+import { z } from "https://esm.sh/zod@3.23.8";
+
+/* ========= ENV ========= */
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+
+/* ========= SCHEMAS ========= */
+const SaveAnalysisRequestSchema = z.object({
+  analysisData: z.object({
+    address: z.string(),
+    coordinates: z.union([
+      // Support both formats: [lng, lat] array and {lat, lng} object
+      z.tuple([z.number(), z.number()]), // [lng, lat]
+      z.object({
+        lat: z.number(),
+        lng: z.number(),
+      })
+    ]),
+    coverage: z.object({
+      google: z.boolean(),
+      fallback: z.string().optional(),
+    }),
+    confidence: z.enum(["Alta", "Média", "Baixa"]),
+    usableArea: z.number(),
+    areaSource: z.enum(["google", "estimate", "footprint", "manual"]),
+    annualIrradiation: z.number(),
+    irradiationSource: z.string(),
+    shadingIndex: z.number(),
+    shadingLoss: z.number(),
+    estimatedProduction: z.number(),
+    verdict: z.enum(["Apto", "Parcial", "Não apto"]),
+    reasons: z.array(z.string()),
+    usageFactor: z.number(),
+    footprints: z.array(z.any()),
+    googleSolarData: z.any().optional(),
+    technicalNote: z.string().optional(),
+    // Optional fields that may be present
+    id: z.string().optional(),
+    createdAt: z.string().optional(),
+  }),
+});
+
+/* ========= DATABASE ========= */
+async function saveAnalysisToDatabase(analysisData: any, userId: string, supabase: any) {
+  try {
+    console.log('Attempting to save analysis for user:', userId);
+    console.log('Analysis data keys:', Object.keys(analysisData));
+    
+    // Normalize coordinates to {lat, lng} format
+    let normalizedCoordinates;
+    if (Array.isArray(analysisData.coordinates)) {
+      // Convert [lng, lat] to {lat, lng}
+      const [lng, lat] = analysisData.coordinates;
+      normalizedCoordinates = { lat, lng };
+    } else {
+      // Already in {lat, lng} format
+      normalizedCoordinates = analysisData.coordinates;
+    }
+    
+    const insertData = {
+      user_id: userId,
+      address: analysisData.address,
+      coordinates: normalizedCoordinates,
+      coverage: analysisData.coverage,
+      confidence: analysisData.confidence,
+      usable_area: analysisData.usableArea,
+      area_source: analysisData.areaSource,
+      annual_irradiation: analysisData.annualIrradiation,
+      irradiation_source: analysisData.irradiationSource,
+      shading_index: analysisData.shadingIndex,
+      shading_loss: analysisData.shadingLoss,
+      estimated_production: analysisData.estimatedProduction,
+      verdict: analysisData.verdict,
+      reasons: analysisData.reasons,
+      usage_factor: analysisData.usageFactor,
+      footprints: analysisData.footprints,
+      google_solar_data: analysisData.googleSolarData,
+      technical_note: analysisData.technicalNote
+    };
+    
+    console.log('Insert data prepared:', JSON.stringify(insertData, null, 2));
+
+    const { data, error } = await supabase
+      .from('analyses')
+      .insert(insertData)
+      .select('id, created_at')
+      .single();
+
+    if (error) {
+      console.error('Database save error:', JSON.stringify(error, null, 2));
+      console.error('Error details:', {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      return { error: error.message || 'Database error', code: error.code };
+    }
+
+    console.log('Analysis saved successfully:', data);
+    return { id: data.id, createdAt: data.created_at };
+  } catch (error) {
+    console.error('Database save exception:', error);
+    return { error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
+/* ========= AUTH ========= */
+async function verifyAuth(req: Request) {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) {
+    return null;
+  }
+  
+  const token = authHeader.replace("Bearer ", "");
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  
+  const { data: { user }, error } = await supabase.auth.getUser(token);
+  
+  if (error || !user) {
+    console.error("Auth verification failed:", error);
+    return null;
+  }
+  
+  return { user, token };
+}
+
+/* ========= MAIN HANDLER ========= */
+const headers = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers });
+  }
+
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ success: false, error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    // 1) Auth verification
+    const auth = await verifyAuth(req);
+    if (!auth) {
+      return new Response(JSON.stringify({ success: false, error: "Authentication required" }), {
+        status: 401,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+    }
+
+    // 2) Parse and validate request
+    const json = await req.json();
+    console.log('Raw request body:', JSON.stringify(json, null, 2));
+    
+    const input = SaveAnalysisRequestSchema.parse(json);
+    console.log('Validated input - user:', auth.user.id, 'address:', input.analysisData.address);
+    console.log('Auth token present:', !!auth.token, 'length:', auth.token?.length);
+
+    // 3) Save to database with authenticated user context
+    // Create Supabase client with the user's access token
+    const supabase = createClient(
+      SUPABASE_URL, 
+      SUPABASE_ANON_KEY,
+      {
+        global: {
+          headers: {
+            Authorization: `Bearer ${auth.token}`,
+          },
+        },
+      }
+    );
+    
+    const savedResult = await saveAnalysisToDatabase(input.analysisData, auth.user.id, supabase);
+    
+    if (!savedResult || savedResult.error) {
+      console.error('SaveAnalysisToDatabase failed:', savedResult);
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: savedResult?.error || "Failed to save analysis to database",
+        errorCode: savedResult?.code || "DATABASE_SAVE_FAILED"
+      }), {
+        status: 500,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+    }
+
+    // 4) Return success with database info
+    return new Response(JSON.stringify({ 
+      success: true, 
+      data: {
+        id: savedResult.id,
+        createdAt: savedResult.createdAt
+      }
+    }), {
+      status: 200,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+
+  } catch (err) {
+    console.error("Save analysis error:", err);
+    const message = err instanceof Error ? err.message : "Internal error";
+    return new Response(JSON.stringify({ success: false, error: message }), {
+      status: 500,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+  }
+});

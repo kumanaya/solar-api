@@ -1,15 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FileText, DollarSign, Loader2, Zap, Search } from "lucide-react";
+import { FileText, DollarSign, Loader2, Zap, Search, Save } from "lucide-react";
 import { useAnalysis } from "./analysis-context";
 import { PDFModal } from "./pdf-modal";
 import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
 import { getFootprints, transformFootprintData } from "@/lib/footprints-api";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
+import { createClient } from "@/lib/supabase/client";
 
 export function ActionButtons() {
+  const router = useRouter();
   const { 
     data, 
     updateData, 
@@ -31,6 +34,7 @@ export function ActionButtons() {
   const [isPDFModalOpen, setIsPDFModalOpen] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSearchingFootprints, setIsSearchingFootprints] = useState(false);
+  const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [footprintNotFoundMessage, setFootprintNotFoundMessage] = useState<string | null>(null);
 
   const handleOpenPDFModal = () => {
@@ -46,6 +50,59 @@ export function ActionButtons() {
     } catch (error) {
       console.error("Erro ao adicionar proposta:", error);
       alert("Erro ao adicionar proposta. Tente novamente.");
+    }
+  };
+
+  const handleSaveAnalysis = async () => {
+    if (!data.estimatedProduction || data.estimatedProduction <= 0) {
+      setError('Nenhuma análise disponível para salvar. Execute a análise primeiro.');
+      return;
+    }
+
+    setIsSavingAnalysis(true);
+    setError(null);
+
+    try {
+      console.log('Saving analysis to database...');
+      
+      const supabase = createClient();
+      const { data: saveResult, error } = await supabase.functions.invoke('save-analysis', {
+        body: {
+          analysisData: data
+        }
+      });
+
+      console.log('Save analysis result:', { saveResult, error });
+
+      if (error) {
+        console.error('Save analysis error:', error);
+        setError(error.message || 'Erro ao salvar análise');
+        return;
+      }
+
+      if (!saveResult.success) {
+        console.error('Save failed:', saveResult.error);
+        setError(saveResult.error || 'Erro ao salvar análise');
+        return;
+      }
+
+      // Update analysis data with database info
+      updateData({
+        ...data,
+        id: saveResult.data.id,
+        createdAt: saveResult.data.createdAt
+      });
+
+      console.log('Analysis saved successfully:', saveResult.data);
+      
+      // Redirect to analysis detail page
+      router.push(`/dashboard/analysis/${saveResult.data.id}`);
+
+    } catch (error) {
+      console.error('Save analysis error:', error);
+      setError(error instanceof Error ? error.message : 'Erro inesperado ao salvar análise');
+    } finally {
+      setIsSavingAnalysis(false);
     }
   };
 
@@ -162,9 +219,14 @@ export function ActionButtons() {
       return;
     }
     
-    // Check if footprint search was performed first
+    // Check if we have coordinates and polygon (both required)
+    if (!data.coordinates) {
+      setError('Nenhuma coordenada disponível. Selecione um endereço primeiro.');
+      return;
+    }
+    
     if (!hasFootprintFromAction && data.footprints.length === 0 && !currentPolygon) {
-      setError('Execute primeiro a busca de footprint automático antes de fazer a análise');
+      setError('Execute primeiro a busca de footprint automático ou desenhe o telhado manualmente');
       return;
     }
     
@@ -217,9 +279,18 @@ export function ActionButtons() {
         usableAreaOverride = Math.round(totalArea * data.usageFactor);
       }
       
+      // Ensure we have a polygon to send
+      if (!polygonToSend) {
+        setError('Nenhum polígono disponível para análise. Desenhe o telhado ou busque footprint automático.');
+        return;
+      }
+      
+      const [lng, lat] = data.coordinates;
       const result = await analyzeAddress(
         selectedAddress,
-        polygonToSend || undefined,
+        lat,
+        lng,
+        polygonToSend,
         usableAreaOverride
       );
       
@@ -301,15 +372,32 @@ export function ActionButtons() {
         <Button 
           onClick={handleRunAnalysis}
           className="w-full"
-          disabled={!canAnalyze || isAnalyzing}
+          disabled={!canAnalyze || isAnalyzing || !!data.id}
         >
           {isAnalyzing ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <Zap className="mr-2 h-4 w-4" />
           )}
-          {isAnalyzing ? 'Analisando...' : 'Executar Análise'}
+          {data.id ? 'Análise Salva' : (isAnalyzing ? 'Analisando...' : 'Executar Análise')}
         </Button>
+
+        {/* Botão Salvar Análise - apenas após análise ser executada e não foi salva ainda */}
+        {data.estimatedProduction > 0 && !data.id && (
+          <Button 
+            variant="secondary"
+            onClick={handleSaveAnalysis}
+            className="w-full"
+            disabled={isSavingAnalysis}
+          >
+            {isSavingAnalysis ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            {isSavingAnalysis ? 'Salvando...' : 'Salvar Análise'}
+          </Button>
+        )}
       
 
         {/* Informações adicionais */}

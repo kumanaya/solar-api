@@ -3,11 +3,13 @@ import { ERROR_CODES, createApiError, detectErrorCode } from "@/lib/shared/error
 
 interface AnalysisRequest {
   address: string;
-  polygon?: {
+  lat: number;
+  lng: number;
+  polygon: {
     type: "Polygon";
     coordinates: number[][][]; // [lng,lat]
     source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
-  };
+  }; // Now required
   usableAreaOverride?: number; // m²
 }
 
@@ -51,23 +53,26 @@ interface AnalysisResponse {
 }
 
 export async function analyzeAddress(
-  address: string, 
-  polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" },
+  address: string,
+  lat: number,
+  lng: number, 
+  polygon: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" },
   usableAreaOverride?: number
 ): Promise<AnalysisResponse> {
   try {
     const supabase = createClient();
     
     // Call the edge function (Supabase client handles auth automatically)
-    console.log('Calling edge function with address:', address);
+    console.log('Calling edge function with coordinates:', { address, lat, lng });
     
-    const requestBody: AnalysisRequest = { address };
+    const requestBody: AnalysisRequest = { 
+      address, 
+      lat, 
+      lng, 
+      polygon 
+    };
     
-    // Add polygon if provided
-    if (polygon) {
-      requestBody.polygon = polygon;
-      console.log('Including polygon in analysis request:', polygon);
-    }
+    console.log('Including polygon in analysis request:', polygon);
     
     // Add usable area override if provided
     if (usableAreaOverride && usableAreaOverride > 0) {
