@@ -90,6 +90,12 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   
   // Polygon drawing state (back to local state)
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
+  const drawingCoordinatesRef = useRef<[number, number][]>([]);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    drawingCoordinatesRef.current = drawingCoordinates;
+  }, [drawingCoordinates]);
 
   // Session storage key for pin data
   const PIN_STORAGE_KEY = 'lumionfy-pin-data';
@@ -710,32 +716,62 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
 
     const handleDrawingClick = (e: maplibregl.MapMouseEvent) => {
       if (!drawingMode && !isDrawingMode) return;
-      // Check if click was on a layer (footprints or drawn polygon)
-      let features: maplibregl.MapGeoJSONFeature[] = [];
+      
+      // Check if clicked on the first drawing point (red circle) to close polygon
+      let drawingPointFeatures: maplibregl.MapGeoJSONFeature[] = [];
+      let otherFeatures: maplibregl.MapGeoJSONFeature[] = [];
       
       try {
-        // Check which layers exist and query only those
-        const existingLayers = [];
-        if (map.current!.getLayer('footprints-fill')) {
-          existingLayers.push('footprints-fill');
-        }
-        if (map.current!.getLayer('drawn-polygon-fill')) {
-          existingLayers.push('drawn-polygon-fill');
+        // Check if clicked on drawing points (including first point)
+        if (map.current!.getLayer('drawing-points')) {
+          drawingPointFeatures = map.current!.queryRenderedFeatures(e.point, {
+            layers: ['drawing-points']
+          });
         }
         
-        if (existingLayers.length > 0) {
-          features = map.current!.queryRenderedFeatures(e.point, {
-            layers: existingLayers
+        // Check if clicked on other layers (footprints or drawn polygon)
+        const otherLayers = [];
+        if (map.current!.getLayer('footprints-fill')) {
+          otherLayers.push('footprints-fill');
+        }
+        if (map.current!.getLayer('drawn-polygon-fill')) {
+          otherLayers.push('drawn-polygon-fill');
+        }
+        
+        if (otherLayers.length > 0) {
+          otherFeatures = map.current!.queryRenderedFeatures(e.point, {
+            layers: otherLayers
           });
         }
       } catch (error) {
         console.log('Error querying features:', error);
-        features = [];
+        drawingPointFeatures = [];
+        otherFeatures = [];
       }
 
-      // If clicked on a layer, don't add a drawing point (let layer handlers show popup)
-      if (features.length > 0) {
+      // If clicked on other layers (not drawing points), don't add a drawing point
+      if (otherFeatures.length > 0) {
         console.log('Clicked on layer, not adding drawing point');
+        return;
+      }
+
+      // Check if clicked on the first point specifically
+      const currentCoords = drawingCoordinatesRef.current;
+      if (drawingPointFeatures.length > 0 && currentCoords.length >= 3) {
+        const clickedPoint = drawingPointFeatures[0];
+        
+        if (clickedPoint.properties?.isFirst === true) {
+          console.log('SUCCESS: Clicked on first point - closing polygon');
+          console.log('Current drawing coordinates:', currentCoords);
+          // Use setTimeout to ensure this happens after all other processing
+          setTimeout(() => {
+            finishDrawing(currentCoords);
+            setDrawingCoordinates([]);
+          }, 0);
+          return;
+        }
+        // If clicked on other drawing points, don't add new point
+        console.log('Clicked on existing drawing point (not first), not adding new point');
         return;
       }
 
@@ -743,19 +779,6 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       const newCoord: [number, number] = [lng, lat];
 
       setDrawingCoordinates(prev => {
-        // Se já temos pelo menos 3 pontos, verificar se clicou próximo do primeiro
-        if (prev.length >= 3) {
-          const firstPoint = prev[0];
-          const distance = calculateDistance(newCoord, firstPoint);
-          
-          // Se clicou próximo do primeiro ponto (dentro de ~10 metros), fechar polígono
-          if (distance < 0.0001) { // aproximadamente 10-15 metros
-            console.log('Closing polygon automatically - clicked near first point');
-            finishDrawing(prev);
-            setDrawingCoordinates([]);
-            return prev; // Return unchanged to avoid adding the close point
-          }
-        }
 
         const newCoords = [...prev, newCoord];
         
@@ -771,19 +794,33 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
 
     const handleDrawingMouseMove = (e: maplibregl.MapMouseEvent) => {
       if (!drawingMode && !isDrawingMode) return;
-      if (drawingCoordinates.length < 3) return;
+      if (drawingCoordinatesRef.current.length < 3) return;
 
-      const { lng, lat } = e.lngLat;
-      const currentCoord: [number, number] = [lng, lat];
-      const firstPoint = drawingCoordinates[0];
-      const distance = calculateDistance(currentCoord, firstPoint);
-      
-      // Se está próximo do primeiro ponto, mudar cursor para indicar que pode fechar
-      if (distance < 0.0001) {
-        map.current!.getCanvas().style.cursor = 'pointer';
-        map.current!.getCanvas().title = 'Clique para fechar o polígono';
-      } else {
-        map.current!.getCanvas().style.cursor = isDrawingMode ? 'crosshair' : 'default';
+      try {
+        // Check if hovering over the first drawing point (red circle)
+        let drawingPointFeatures: maplibregl.MapGeoJSONFeature[] = [];
+        
+        if (map.current!.getLayer('drawing-points')) {
+          drawingPointFeatures = map.current!.queryRenderedFeatures(e.point, {
+            layers: ['drawing-points']
+          });
+        }
+
+        // Check if hovering over the first point specifically
+        const isOverFirstPoint = drawingPointFeatures.some(feature => 
+          feature.properties?.isFirst === true
+        );
+
+        if (isOverFirstPoint) {
+          map.current!.getCanvas().style.cursor = 'pointer';
+          map.current!.getCanvas().title = 'Clique no ponto vermelho para fechar o polígono';
+        } else {
+          map.current!.getCanvas().style.cursor = 'crosshair';
+          map.current!.getCanvas().title = '';
+        }
+      } catch (error) {
+        // Fallback to default cursor if there's an error
+        map.current!.getCanvas().style.cursor = drawingMode ? 'crosshair' : 'default';
         map.current!.getCanvas().title = '';
       }
     };
@@ -1349,8 +1386,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
             <div className="text-xs text-muted-foreground">
               {drawingCoordinates.length === 0 && "Clique no mapa para começar a desenhar o telhado"}
               {drawingCoordinates.length === 1 && "Continue clicando para definir os cantos"}
-              {drawingCoordinates.length === 2 && "Adicione mais pontos ou dê duplo-clique para finalizar"}
-              {drawingCoordinates.length >= 3 && "Duplo-clique para finalizar o desenho"}
+              {drawingCoordinates.length === 2 && "Adicione mais pontos para continuar"}
+              {drawingCoordinates.length >= 3 && "Clique no ponto vermelho para fechar o polígono ou dê duplo-clique"}
             </div>
             {drawingCoordinates.length > 0 && (
               <div className="text-xs text-blue-600 mt-1">
