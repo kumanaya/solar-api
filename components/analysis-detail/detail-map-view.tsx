@@ -104,35 +104,52 @@ export function DetailMapView() {
   useEffect(() => {
     if (!map.current || !mapLoaded || !analysis) return;
 
-    console.log('Analysis data for map:', {
-      id: analysis.id,
-      coordinates: analysis.coordinates,
-      footprints: analysis.footprints,
-      polygon: analysis.polygon
-    });
+    // Ensure style is fully loaded before adding sources/layers
+    if (!map.current.isStyleLoaded()) {
+      // Wait for style to load
+      map.current.once('styledata', () => {
+        // Retry this effect after style loads
+        if (map.current && mapLoaded && analysis) {
+          addAnalysisDataToMap();
+        }
+      });
+      return;
+    }
 
-    // Add marker for the address
-    new maplibregl.Marker({ color: '#ef4444' })
-      .setLngLat([analysis.coordinates[1], analysis.coordinates[0]])
-      .addTo(map.current);
+    addAnalysisDataToMap();
 
-    // Add all footprints from the analysis data
-    if (analysis.footprints && analysis.footprints.length > 0) {
-      console.log('Adding footprints to map:', analysis.footprints);
-      
-      analysis.footprints.forEach((footprint, index) => {
-        // Coordinates are already in [lng, lat] format from database
-        const coordinates = footprint.coordinates;
+    function addAnalysisDataToMap() {
+      if (!map.current || !analysis) return;
+
+      console.log('Analysis data for map:', {
+        id: analysis.id,
+        coordinates: analysis.coordinates,
+        footprints: analysis.footprints,
+        polygon: analysis.polygon
+      });
+
+      // Add marker for the address
+      new maplibregl.Marker({ color: '#ef4444' })
+        .setLngLat([analysis.coordinates[1], analysis.coordinates[0]])
+        .addTo(map.current);
+
+      // Add all footprints from the analysis data
+      if (analysis.footprints && analysis.footprints.length > 0) {
+        console.log('Adding footprints to map:', analysis.footprints);
         
-        console.log(`Adding footprint ${index}:`, {
-          id: footprint.id,
-          coordinates,
-          isActive: footprint.isActive,
-          area: footprint.area
-        });
-        
-        // Add source for this footprint
-        map.current!.addSource(`footprint-${index}`, {
+        analysis.footprints.forEach((footprint, index) => {
+          // Coordinates are already in [lng, lat] format from database
+          const coordinates = footprint.coordinates;
+          
+          console.log(`Adding footprint ${index}:`, {
+            id: footprint.id,
+            coordinates,
+            isActive: footprint.isActive,
+            area: footprint.area
+          });
+          
+          // Add source for this footprint
+          map.current!.addSource(`footprint-${index}`, {
           type: 'geojson',
           data: {
             type: 'Feature',
@@ -228,6 +245,7 @@ export function DetailMapView() {
       const bounds = new maplibregl.LngLatBounds();
       coordinates.forEach(coord => bounds.extend(coord));
       map.current.fitBounds(bounds, { padding: 50 });
+    }
     }
   }, [mapLoaded, analysis]);
 
