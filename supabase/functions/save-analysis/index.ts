@@ -94,7 +94,8 @@ async function saveAnalysisToDatabase(analysisData: any, userId: string, supabas
       confidence: analysisData.confidence,
       usable_area: analysisData.usableArea,
       area_source: analysisData.areaSource,
-      annual_irradiation: analysisData.annualIrradiation,
+      usage_factor: analysisData.usageFactor,
+      annual_ghi: analysisData.annualGHI || analysisData.annualIrradiation,
       irradiation_source: analysisData.irradiationSource,
       shading_index: analysisData.shadingIndex,
       shading_loss: analysisData.shadingLoss,
@@ -111,7 +112,6 @@ async function saveAnalysisToDatabase(analysisData: any, userId: string, supabas
       reasons: analysisData.reasons,
       recommendations: analysisData.recommendations,
       warnings: analysisData.warnings,
-      usage_factor: analysisData.usageFactor,
       footprints: analysisData.footprints,
       google_solar_data: analysisData.googleSolarData,
       technical_note: analysisData.technicalNote

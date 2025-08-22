@@ -9,7 +9,7 @@ export interface AnalysisVersion {
   date: string;
   confidence: "Alta" | "Média" | "Baixa";
   usableArea: number;
-  annualIrradiation: number;
+  annualGHI: number;
   estimatedProduction: number;
   verdict: "Apto" | "Parcial" | "Não apto";
   sources: string[];
@@ -20,6 +20,14 @@ export interface AnalysisVersion {
   variationFromPrevious?: number;
   shadingIndex?: number;
   shadingLoss?: number;
+  shadingSource?: "google_measured" | "user_input" | "description" | "heuristic";
+  estimatedProductionAC?: number;
+  estimatedProductionDC?: number;
+  estimatedProductionYear1?: number;
+  estimatedProductionYear25?: number;
+  temperatureLosses?: number;
+  degradationFactor?: number;
+  effectivePR?: number;
 }
 
 export interface DetailedAnalysis {
@@ -50,6 +58,8 @@ export interface DetailedAnalysis {
   reprocessCount: number;
   technicalNote?: string;
   reasons: string[];
+  recommendations?: string[];
+  warnings?: string[];
 }
 
 interface AnalysisDetailContextType {
@@ -75,7 +85,7 @@ const transformApiDataToDetailedAnalysis = (apiData: ReturnType<typeof transform
     date: apiData.createdAt,
     confidence: apiData.confidence,
     usableArea: apiData.usableArea,
-    annualIrradiation: apiData.annualIrradiation,
+    annualGHI: apiData.annualGHI || 1800,
     estimatedProduction: apiData.estimatedProduction,
     verdict: apiData.verdict,
     sources: [apiData.irradiationSource],
@@ -85,7 +95,15 @@ const transformApiDataToDetailedAnalysis = (apiData: ReturnType<typeof transform
     },
     variationFromPrevious: undefined,
     shadingIndex: apiData.shadingIndex,
-    shadingLoss: apiData.shadingLoss
+    shadingLoss: apiData.shadingLoss,
+    shadingSource: apiData.shadingSource,
+    estimatedProductionAC: apiData.estimatedProductionAC,
+    estimatedProductionDC: apiData.estimatedProductionDC,
+    estimatedProductionYear1: apiData.estimatedProductionYear1,
+    estimatedProductionYear25: apiData.estimatedProductionYear25,
+    temperatureLosses: apiData.temperatureLosses,
+    degradationFactor: apiData.degradationFactor,
+    effectivePR: apiData.effectivePR
   };
 
   // For now, history contains only the current version
@@ -190,11 +208,13 @@ export function AnalysisDetailProvider({
         source: "user-drawn" as const
       } : undefined;
       
-      const response = await analyzeAddress({
-        address: analysis.address,
-        polygon,
-        usableAreaOverride: parameters.usableAreaOverride as number | undefined
-      });
+      const response = await analyzeAddress(
+        analysis.address,
+        analysis.coordinates[1], // lat
+        analysis.coordinates[0], // lng
+        polygon || { type: "Polygon", coordinates: [] },
+        parameters.usableAreaOverride as number | undefined
+      );
       
       if (!response.success || !response.data) {
         setError(response.error || "Erro ao reprocessar análise");
@@ -219,7 +239,7 @@ export function AnalysisDetailProvider({
         date: transformedData.createdAt,
         confidence: transformedData.confidence,
         usableArea: transformedData.usableArea,
-        annualIrradiation: transformedData.annualIrradiation,
+        annualGHI: transformedData.annualGHI || 1800,
         estimatedProduction: transformedData.estimatedProduction,
         verdict: transformedData.verdict,
         sources: [transformedData.irradiationSource],
@@ -229,7 +249,15 @@ export function AnalysisDetailProvider({
         },
         variationFromPrevious,
         shadingIndex: transformedData.shadingIndex,
-        shadingLoss: transformedData.shadingLoss
+        shadingLoss: transformedData.shadingLoss,
+        shadingSource: transformedData.shadingSource,
+        estimatedProductionAC: transformedData.estimatedProductionAC,
+        estimatedProductionDC: transformedData.estimatedProductionDC,
+        estimatedProductionYear1: transformedData.estimatedProductionYear1,
+        estimatedProductionYear25: transformedData.estimatedProductionYear25,
+        temperatureLosses: transformedData.temperatureLosses,
+        degradationFactor: transformedData.degradationFactor,
+        effectivePR: transformedData.effectivePR
       };
 
       const updatedAnalysis = {

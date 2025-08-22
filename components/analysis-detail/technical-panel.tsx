@@ -11,7 +11,11 @@ import {
   ProductionCard,
   VerdictCard,
   SystemConfigCard,
-  SystemLifetimeCard
+  SystemLifetimeCard,
+  ConfidenceCard,
+  TechnicalDetailsCard,
+  RecommendationsCard,
+  WarningsCard
 } from "@/components/shared/analysis-cards";
 
 export function TechnicalPanel() {
@@ -29,7 +33,7 @@ export function TechnicalPanel() {
     );
   }
 
-  const { currentVersion } = analysis;
+  const cv = analysis.currentVersion;
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
@@ -52,7 +56,7 @@ export function TechnicalPanel() {
         </div>
         <div className="flex items-center space-x-2 mt-2 text-sm text-muted-foreground">
           <Calendar className="h-4 w-4" />
-          <span>Calculado em {formatDate(currentVersion.date)}</span>
+          <span>Calculado em {formatDate(cv.date)}</span>
         </div>
       </div>
 
@@ -87,7 +91,7 @@ export function TechnicalPanel() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Fonte principal:</span>
                   <Badge variant="outline" className="text-xs">
-                    {analysis.sources.google ? 'Google Solar API' : 'PVGIS + NASA'}
+                    {analysis.sources.google ? 'Google Solar API' : (cv.sources?.[0] || 'PVGIS + NASA')}
                   </Badge>
                 </div>
               </div>
@@ -95,47 +99,77 @@ export function TechnicalPanel() {
           </CardContent>
         </Card>
 
+        <ConfidenceCard
+          confidence={cv.confidence}
+          coverage={{
+            google: analysis.sources.google,
+            fallback: cv.sources?.[0] || 'PVGIS + NASA',
+            dataQuality: analysis.sources.google ? 'alta' : 'estimated'
+          }}
+          isLocked={true}
+        />
+
         <AreaCard
-          usableArea={currentVersion.usableArea}
-          areaSource={analysis.areaSource}
+          usableArea={cv.usableArea}
+          areaSource={analysis.footprints?.[0]?.source || "manual"}
           footprints={analysis.footprints}
-          usageFactor={currentVersion.parameters.usageFactor}
+          usageFactor={cv.parameters?.usageFactor}
           isLocked={true}
         />
 
         <IrradiationCard
-          annualIrradiation={currentVersion.annualIrradiation}
-          irradiationSource={analysis.sources.google ? 'Google Solar API' : 'PVGIS + NASA'}
-          sources={currentVersion.sources}
+          annualIrradiation={cv.annualIrradiation}
+          irradiationSource={cv.sources?.[0] || 'PVGIS + NASA'}
           isLocked={true}
         />
 
         <ShadingCard
-          shadingIndex={currentVersion.shadingIndex}
-          shadingLoss={currentVersion.shadingLoss}
+          shadingIndex={cv.shadingIndex || 0}
+          shadingLoss={cv.shadingLoss || 0}
           isLocked={true}
           showDetails={true}
         />
 
         <ProductionCard
-          estimatedProduction={currentVersion.estimatedProduction}
-          usableArea={currentVersion.usableArea}
+          estimatedProduction={cv.estimatedProduction}
+          usableArea={cv.usableArea}
           isLocked={true}
           showDetails={true}
         />
 
+        <TechnicalDetailsCard
+          estimatedProductionAC={cv.estimatedProductionAC || 0}
+          estimatedProductionDC={cv.estimatedProductionDC || 0}
+          estimatedProductionYear1={cv.estimatedProductionYear1 || 0}
+          estimatedProductionYear25={cv.estimatedProductionYear25 || 0}
+          temperatureLosses={cv.temperatureLosses || 0}
+          degradationFactor={cv.degradationFactor || 0}
+          effectivePR={cv.effectivePR || 0}
+          isLocked={true}
+        />
+
         <SystemConfigCard
-          usableArea={currentVersion.usableArea}
+          usableArea={cv.usableArea}
           isLocked={true}
         />
 
         <SystemLifetimeCard
-          estimatedProduction={currentVersion.estimatedProduction}
+          estimatedProduction={cv.estimatedProduction}
+          isLocked={true}
+        />
+
+        <RecommendationsCard
+          recommendations={analysis.recommendations ?? []}
+          isLocked={true}
+        />
+
+        <WarningsCard
+          warnings={analysis.warnings ?? []}
           isLocked={true}
         />
 
         <VerdictCard
-          verdict={currentVersion.verdict}
+          verdict={cv.verdict}
           reasons={analysis.reasons}
           isLocked={true}
         />
@@ -167,7 +201,7 @@ export function TechnicalPanel() {
             <div className="text-sm">
               <p className="font-medium">Resultados Congelados</p>
               <p className="text-muted-foreground mt-1">
-                Estes dados foram calculados em {formatDate(currentVersion.date)} e não podem ser editados. 
+                Estes dados foram calculados em {formatDate(cv.date)} e não podem ser editados.
                 Use &ldquo;Reprocessar&rdquo; para gerar novos resultados.
               </p>
             </div>

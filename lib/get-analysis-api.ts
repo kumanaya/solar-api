@@ -17,17 +17,28 @@ interface GetAnalysisResponse {
     coverage: {
       google: boolean;
       fallback?: string;
+      dataQuality?: "measured" | "calculated" | "estimated";
     };
     confidence: 'Alta' | 'Média' | 'Baixa';
     usableArea: number;
     areaSource: 'google' | 'estimate' | 'footprint' | 'manual';
-    annualIrradiation: number;
+    annualGHI: number;
     irradiationSource: string;
     shadingIndex: number;
     shadingLoss: number;
+    shadingSource?: "google_measured" | "user_input" | "description" | "heuristic";
     estimatedProduction: number;
+    estimatedProductionAC?: number;
+    estimatedProductionDC?: number;
+    estimatedProductionYear1?: number;
+    estimatedProductionYear25?: number;
+    temperatureLosses?: number;
+    degradationFactor?: number;
+    effectivePR?: number;
     verdict: 'Apto' | 'Parcial' | 'Não apto';
     reasons: string[];
+    recommendations?: string[];
+    warnings?: string[];
     footprints: Array<{
       id: string;
       coordinates: [number, number][];
@@ -149,18 +160,29 @@ export function transformGetAnalysisData(apiData: GetAnalysisResponse['data']) {
     coordinates: [apiData.coordinates.lng, apiData.coordinates.lat] as [number, number],
     coverage: {
       google: apiData.coverage.google,
-      fallback: apiData.coverage.fallback || (apiData.coverage.google ? undefined : "Usando estimativas regionais")
+      fallback: apiData.coverage.fallback || (apiData.coverage.google ? undefined : "Usando estimativas regionais"),
+      dataQuality: apiData.coverage.dataQuality
     },
     confidence: apiData.confidence,
     usableArea: apiData.usableArea,
     areaSource: apiData.areaSource,
-    annualIrradiation: apiData.annualIrradiation,
+    annualGHI: apiData.annualGHI,
     irradiationSource: apiData.irradiationSource,
     shadingIndex: apiData.shadingIndex,
     shadingLoss: apiData.shadingLoss,
+    shadingSource: apiData.shadingSource,
     estimatedProduction: apiData.estimatedProduction,
+    estimatedProductionAC: apiData.estimatedProductionAC,
+    estimatedProductionDC: apiData.estimatedProductionDC,
+    estimatedProductionYear1: apiData.estimatedProductionYear1,
+    estimatedProductionYear25: apiData.estimatedProductionYear25,
+    temperatureLosses: apiData.temperatureLosses,
+    degradationFactor: apiData.degradationFactor,
+    effectivePR: apiData.effectivePR,
     verdict: apiData.verdict,
     reasons: apiData.reasons,
+    recommendations: apiData.recommendations,
+    warnings: apiData.warnings,
     footprints: apiData.footprints.map(fp => ({
       id: fp.id,
       coordinates: fp.coordinates,
