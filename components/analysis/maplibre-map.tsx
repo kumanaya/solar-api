@@ -23,6 +23,7 @@ export interface MapLibreMapRef {
   clearDrawing: () => void;
   getDrawingCoordinates: () => [number, number][];
   reopenPolygon: () => void;
+  clearPin: () => void;
 }
 
 // Move function outside component to avoid re-creation
@@ -141,9 +142,41 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         }
       }
     },
-    getDrawingCoordinates: () => drawingCoordinates
+    getDrawingCoordinates: () => drawingCoordinates,
+    clearPin: () => {
+      // Remove existing pin marker (red)
+      if (pinMarkerRef.current) {
+        try {
+          pinMarkerRef.current.remove();
+        } catch (error) {
+          console.error('Error calling pin marker remove():', error);
+        }
+        pinMarkerRef.current = null;
+      }
+      
+      // Also remove the address marker (blue) since they're in the same location
+      if (markerRef.current) {
+        try {
+          markerRef.current.remove();
+        } catch (error) {
+          console.error('Error calling address marker remove():', error);
+        }
+        markerRef.current = null;
+      }
+      
+      // Clear pin coordinates and address data
+      setPinCoordinates(null);
+      onPinStatusChange?.(false);
+      
+      // Clear address data from context
+      updateData({
+        address: '',
+        coordinates: undefined
+      });
+      setSelectedAddress('');
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [drawingCoordinates, onDrawingCoordinatesChange]);
+  }), [drawingCoordinates, onDrawingCoordinatesChange, onPinStatusChange, pinCoordinates, updateData, setSelectedAddress]);
 
   // Initialize map
   useEffect(() => {

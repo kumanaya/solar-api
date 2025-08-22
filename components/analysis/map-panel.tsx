@@ -44,6 +44,11 @@ export function MapPanel() {
     setHasPin(hasPin);
   };
 
+  // Function to handle pin removal
+  const handleClearPin = () => {
+    mapRef.current?.clearPin();
+  };
+
   // Auto-hide drawing instructions after 5 seconds
   useEffect(() => {
     if (isDrawingMode) {
@@ -119,21 +124,28 @@ export function MapPanel() {
         {!isDrawingMode && (
           <button
             onClick={() => {
-              setIsPinMode(!isPinMode);
-              if (isDrawingMode) setIsDrawingMode(false);
+              if (isPinMode || hasPin) {
+                // Se está no modo pin OU há um pin no mapa, cancelar e limpar pin existente
+                setIsPinMode(false);
+                handleClearPin();
+              } else {
+                // Se não está no modo pin e não há pin, ativar modo pin
+                setIsPinMode(true);
+                if (isDrawingMode) setIsDrawingMode(false);
+              }
             }}
             className={`w-full px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base shadow-lg flex items-center justify-center space-x-2 ${
-              isPinMode
+              isPinMode || hasPin
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "bg-background text-foreground hover:bg-muted border"
             }`}
           >
             <MapPin className="h-4 w-4" />
             <span className="hidden md:inline">
-              {isPinMode ? "Cancelar Pin" : "Colocar Pin"}
+              {(isPinMode || hasPin) ? "Cancelar Pin" : "Colocar Pin"}
             </span>
             <span className="md:hidden">
-              {isPinMode ? "Cancelar" : "Pin"}
+              {(isPinMode || hasPin) ? "Cancelar" : "Pin"}
             </span>
           </button>
         )}
