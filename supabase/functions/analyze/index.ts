@@ -1,7 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-// Edge Function – Análise Solar para Laudo Técnico
-
-/// <reference lib="dom" />
+// Edge Function – Análise Solar para Laudo Técnico (corrigida, patches aplicados v2.2)
 
 // @ts-ignore Deno types no edge
 declare const Deno: {
@@ -18,21 +16,28 @@ const GOOGLE_SOLAR_API_KEY = GOOGLE_MAPS_API_KEY;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
+/* ========= CONSTANTES ========= */
+const WGS84_R = 6378137; // raio (m)
+const DEFAULT_EFF = 0.20; // 20% ≈ 200 Wp/m²
+const DEFAULT_PR = 0.75;
+const MAX_SHADE_LOSS = 0.30; // agora até 30%
+const INVERTER_EFF = 0.96; // eficiência de conversão DC→AC (~4% perdas)
+
 /* ========= SCHEMAS ========= */
 const AnalyzeRequestSchema = z.object({
   address: z.string().min(5),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
-  usableAreaOverride: z.number().positive().optional(), // m²
+  usableAreaOverride: z.number().positive().optional(),
   polygon: z.object({
     type: z.literal("Polygon"),
-    coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))), // [lng,lat]
+    coordinates: z.array(z.array(z.tuple([z.number(), z.number()]))),
     source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
-  }), // Now required, not optional
+  }),
 });
 
 const AnalysisSchema = z.object({
-  id: z.string().uuid().optional(), // Analysis ID from database
+  id: z.string().uuid().optional(),
   address: z.string(),
   coordinates: z.object({ lat: z.number(), lng: z.number() }),
   coverage: z.object({
@@ -40,16 +45,18 @@ const AnalysisSchema = z.object({
     fallback: z.string().optional(),
   }),
   confidence: z.enum(["Alta", "Média", "Baixa"]),
-  usableArea: z.number(), // m² (já com fator de uso aplicado)
+  usableArea: z.number(),
   areaSource: z.enum(["google", "footprint", "manual", "estimate"]),
-  annualIrradiation: z.number(), // kWh/m²/ano
+  annualGHI: z.number(),
   irradiationSource: z.string(),
-  shadingIndex: z.number(), // 0..1
-  shadingLoss: z.number(), // 0..100 (%)
-  estimatedProduction: z.number(), // kWh/ano
+  shadingIndex: z.number(),
+  shadingLoss: z.number(),
+  estimatedProduction: z.number(),
+  estimatedProductionAC: z.number().optional(),
+  estimatedProductionDC: z.number().optional(),
   verdict: z.enum(["Apto", "Parcial", "Não apto"]),
   reasons: z.array(z.string()),
-  usageFactor: z.number(), // 0..1
+  usageFactor: z.number(),
   footprints: z.array(z.object({
     id: z.string(),
     coordinates: z.array(z.tuple([z.number(), z.number()])),
@@ -58,8 +65,8 @@ const AnalysisSchema = z.object({
     source: z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]).optional(),
   })),
   googleSolarData: z.any().optional(),
-  technicalNote: z.string().optional(), // Inclui nota técnica automática
-  createdAt: z.string().optional(), // ISO timestamp
+  technicalNote: z.string().optional(),
+  createdAt: z.string().optional(),
 });
 
 /* ========= TIPOS GOOGLE SOLAR ========= */
@@ -105,9 +112,7 @@ type SolarApiResponse = {
 
 /* ========= HELPERS ========= */
 
-// CORS
-const ALLOWED_ORIGINS = ["*"];
-function corsHeaders(origin: string | null) {
+function corsHeaders(_origin: string | null) {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS, GET",
@@ -130,10 +135,36 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
 }
 
-// Área do polígono (m²) usando aproximação esférica (Shoelace) – *para laudo, observar margem de erro*:
-function polygonAreaM2(coords: [number, number][]): number {
-  // coords em [lng,lat]; projeta aproximando 1° ~ 111_000 m
-  // ATENÇÃO: margem de erro pode ser até ±5% conforme latitude
+function shadeLossFracFromIndex(idx: number) {
+  const clamped = clamp(idx ?? 0, 0, 1);
+  return MAX_SHADE_LOSS * clamped;
+}
+
+/** Área de polígono geodésica em m² (Chamberlain & Duquette, esfera) */
+function polygonAreaM2_geodesic(coords: [number, number][]): number {
+  if (coords.length < 3) return 0;
+  const ring = coords[0][0] === coords[coords.length - 1][0] &&
+               coords[0][1] === coords[coords.length - 1][1]
+               ? coords
+               : [...coords, coords[0]];
+  let sum = 0;
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [lon1, lat1] = ring[i];
+    const [lon2, lat2] = ring[i + 1];
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const λ1 = (lon1 * Math.PI) / 180;
+    let λ2 = (lon2 * Math.PI) / 180;
+    let dλ = λ2 - λ1;
+    if (dλ > Math.PI) dλ -= 2 * Math.PI;
+    if (dλ < -Math.PI) dλ += 2 * Math.PI;
+    sum += dλ * (Math.sin(φ1) + Math.sin(φ2));
+  }
+  const area = Math.abs((WGS84_R * WGS84_R * sum) / 2);
+  return area;
+}
+
+function polygonAreaM2_planar(coords: [number, number][]): number {
   if (coords.length < 3) return 0;
   const toXY = (lng: number, lat: number) => {
     const x = (lng * Math.cos((lat * Math.PI) / 180)) * 111_000;
@@ -151,22 +182,64 @@ function polygonAreaM2(coords: [number, number][]): number {
   return Math.abs(area / 2);
 }
 
-// kWh/ano via GHI (determinístico, sem ceiling, sempre documentando PR e eficiência)
-function estimateAnnualKwhByGHI(params: {
-  ghi_kwh_m2_year: number;
-  usable_area_m2: number;
-  module_eff?: number; // ~0.20
-  pr?: number; // ~0.75
-  shade_index?: number; // 0..1
-}) {
-  const eff = params.module_eff ?? 0.20;
-  const pr = params.pr ?? 0.75;
-  const shade = clamp(params.shade_index ?? 0.10, 0, 1);
-  const shadeLossFrac = 0.2 * shade; // até 20% no MVP
-  return params.ghi_kwh_m2_year * params.usable_area_m2 * eff * pr * (1 - shadeLossFrac);
+function polygonAreaM2(coords: [number, number][]): number {
+  try {
+    const a = polygonAreaM2_geodesic(coords);
+    if (!isFinite(a) || a <= 0) throw new Error("invalid area");
+    return a;
+  } catch {
+    return polygonAreaM2_planar(coords);
+  }
 }
 
-// Classificação final (sem alteração)
+// Média circular para azimutes (em graus)
+function circularMean(degArr: number[]): number {
+  if (!degArr.length) return 0;
+  const rads = degArr.map(d => d * Math.PI / 180);
+  const x = rads.reduce((a, t) => a + Math.cos(t), 0);
+  const y = rads.reduce((a, t) => a + Math.sin(t), 0);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// Produção via PVGIS E_y (kWh/kWp/ano) → NÃO usar PR
+function estimateByPVGIS_Ey(params: {
+  Ey_kwh_per_kwp_year: number;
+  usable_area_m2: number;
+  module_eff?: number;
+  shade_index?: number;
+}) {
+  const eff = params.module_eff ?? DEFAULT_EFF;
+  const kWp = params.usable_area_m2 * eff;
+  const shadeLoss = 1 - shadeLossFracFromIndex(params.shade_index ?? 0);
+  return params.Ey_kwh_per_kwp_year * kWp * shadeLoss;
+}
+
+// Produção via GHI (kWh/m²/ano) → aplica PR + transposição para POA
+function estimateByGHI(params: {
+  ghi_kwh_m2_year: number;
+  usable_area_m2: number;
+  module_eff?: number;
+  pr?: number;
+  shade_index?: number;
+  tilt_deg?: number;
+  lat?: number;
+}) {
+  const eff = params.module_eff ?? DEFAULT_EFF;
+  const pr = params.pr ?? DEFAULT_PR;
+  const shadeLoss = 1 - shadeLossFracFromIndex(params.shade_index ?? 0);
+  // Ajuste de transposição GHI→POA (simplificado)
+  let transpositionFactor = 1.0;
+  if (params.tilt_deg != null && params.lat != null) {
+    const tilt = params.tilt_deg * Math.PI / 180;
+    const lat = Math.abs(params.lat) * Math.PI / 180;
+    transpositionFactor = Math.max(0.7, Math.cos(lat - tilt) / Math.cos(lat)); // clamp mínimo 0.7
+  } else {
+    transpositionFactor = 0.9; // valor médio para tilts 10–25°
+  }
+  return params.ghi_kwh_m2_year * params.usable_area_m2 * eff * pr * transpositionFactor * shadeLoss;
+}
+
+// Classificação final
 function classifyVerdict(params: {
   usable_area_m2: number;
   shade_index: number;
@@ -205,25 +278,6 @@ function classifyVerdict(params: {
 
 /* ========= DATASOURCES ========= */
 
-async function geocodeAddress(address: string) {
-  if (!GOOGLE_MAPS_API_KEY) throw new Error("Google Maps API key não configurada");
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
-    address,
-  )}&key=${GOOGLE_MAPS_API_KEY}`;
-  const res = await fetchWithTimeout(url, 8000);
-  const j = await res.json();
-  if (j.status === "OK" && j.results?.length) {
-    const r = j.results[0];
-    return {
-      lat: r.geometry.location.lat as number,
-      lng: r.geometry.location.lng as number,
-      formatted: r.formatted_address as string,
-    };
-  }
-  return null;
-}
-
-// Google Solar API
 async function getGoogleSolarData(lat: number, lng: number): Promise<SolarApiResponse | null> {
   if (!GOOGLE_SOLAR_API_KEY) return null;
   const url =
@@ -235,10 +289,17 @@ async function getGoogleSolarData(lat: number, lng: number): Promise<SolarApiRes
   return j;
 }
 
-// PVGIS: E_y (kWh/kWp/ano)
-async function getPVGISYield(lat: number, lng: number) {
-  const url =
-    `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${lat}&lon=${lng}&peakpower=1&loss=14&outputformat=json`;
+// PVGIS: E_y (kWh/kWp/ano) com tilt/azim reais
+async function getPVGISYield(lat: number, lng: number, tilt_deg?: number, azimuth_deg?: number) {
+  let angle = tilt_deg ? Math.round(tilt_deg) : undefined;
+  let aspect: number | undefined;
+  if (azimuth_deg != null) {
+    // Patch: CORREÇÃO do azimute invertido (agora correto!)
+    aspect = ((azimuth_deg - 180 + 540) % 360) - 180;
+  }
+  let url = `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${lat}&lon=${lng}&peakpower=1&loss=14&outputformat=json`;
+  if (angle != null) url += `&angle=${angle}`;
+  if (aspect != null) url += `&aspect=${aspect}`;
   const res = await fetchWithTimeout(url, 8000);
   if (!res.ok) return null;
   const j = await res.json();
@@ -268,75 +329,138 @@ async function getNASAGHI(lat: number, lng: number) {
 
 /* ========= PROCESSADORES ========= */
 
+function computeShadeIndexFromQuantiles(q: number[] | undefined, fallbackMax: number | undefined) {
+  if (!q?.length) {
+    const maxSun = fallbackMax ?? 1500;
+    const mid = maxSun * 0.85;
+    return clamp(1 - (mid / Math.max(maxSun, 1)), 0, 1);
+  }
+  const n = q.length;
+  let center: number;
+  if (n >= 5) {
+    const p40 = q[Math.floor(n * 0.4)];
+    const p50 = q[Math.floor(n * 0.5)];
+    const p60 = q[Math.floor(n * 0.6)];
+    center = (p40 + p50 + p60) / 3;
+  } else {
+    center = q[Math.floor(n / 2)];
+  }
+  const max = q[n - 1] ?? fallbackMax ?? center;
+  return clamp(1 - (center / Math.max(max, 1)), 0, 1);
+}
+
 // Google Solar Data
-function processGoogleSolarData(
+async function processGoogleSolarData(
   solar: SolarApiResponse,
   address: string,
   lat: number,
   lng: number,
-  polygon?: { type: "Polygon"; coordinates: number[][][] },
+  polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn"|"microsoft-footprint"|"google-footprint" },
   usableAreaOverride?: number,
 ) {
   const sp = solar.solarPotential!;
   const wholeArea = sp.wholeRoofStats?.areaMeters2 ?? 0;
-  let usableArea = Math.floor(sp.maxArrayAreaMeters2 ?? wholeArea * 0.70);
-  let areaSource: "google" | "manual" | "footprint" = "google";
-  const usageFactor = 0.80;
 
-  // Use polygon or override area if provided
+  // --- ÁREA UTIL (corrigido) ---
+  let usageFactor = 0.80;
+  let usableAreaRaw: number = 0;
+  let areaSource: "google" | "manual" | "footprint" = "google";
+  let applyUF = 1.0;
+
   if (usableAreaOverride && usableAreaOverride > 0) {
-    usableArea = usableAreaOverride;
+    usableAreaRaw = usableAreaOverride;
     areaSource = "manual";
+    applyUF = 1.0;
   } else if (polygon?.coordinates?.length) {
     const ring = polygon.coordinates[0] as [number, number][];
-    const polyArea = polygonAreaM2(ring);
-    usableArea = Math.max(0, polyArea * usageFactor);
+    usableAreaRaw = polygonAreaM2(ring);
     areaSource = "footprint";
+    applyUF = usageFactor;
+  } else if (typeof sp.maxArrayAreaMeters2 === "number" && sp.maxArrayAreaMeters2 > 0) {
+    usableAreaRaw = sp.maxArrayAreaMeters2; // já descontado
+    areaSource = "google";
+    applyUF = 1.0; // NÃO aplica uso de novo!
+  } else {
+    usableAreaRaw = wholeArea * 0.70; // fallback conservador
+    areaSource = "google";
+    applyUF = usageFactor;
   }
 
-  // Shade index pela razão mediana/max das horas de sol
-  const q = sp.wholeRoofStats?.sunshineQuantiles ?? [];
-  const maxSun = q.length ? q[q.length - 1] : sp.maxSunshineHoursPerYear ?? 0;
-  const medSun = q.length ? q[Math.floor(q.length / 2)] : (maxSun || 1) * 0.85;
-  const shadeIndex = clamp(1 - (maxSun > 0 ? medSun / maxSun : 0.85), 0, 1);
-  const shadingLoss = Math.round(0.2 * shadeIndex * 100);
+  const usableArea = Math.max(0, Math.round(usableAreaRaw * applyUF));
 
+  // ÍNDICE DE SOMBRA
+  const q = sp.wholeRoofStats?.sunshineQuantiles;
+  const shadeIndex = computeShadeIndexFromQuantiles(q, sp.maxSunshineHoursPerYear);
+  const shadingLoss = Math.round(shadeLossFracFromIndex(shadeIndex) * 100);
+
+  // --- GHI
+  let ghi_kwh_m2_year = 0;
+  let irradiationSource = "";
+  const nasa = await getNASAGHI(lat, lng).catch(() => null);
+  if (nasa?.ghi_kwh_m2_year) {
+    ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
+    irradiationSource = "NASA POWER (GHI)";
+  } else {
+    ghi_kwh_m2_year = 1800;
+    irradiationSource = "Heurística conservadora";
+  }
+
+  // --- ORIENTAÇÃO/INCLINAÇÃO
+  let avgAz = 0;
+  let avgTilt = 15;
+  if (sp.roofSegmentStats?.length) {
+    // Patch: média circular do azimute
+    const azArr = sp.roofSegmentStats.map(s => s.azimuthDegrees ?? 0);
+    avgAz = circularMean(azArr);
+    // Tilt: média aritmética
+    avgTilt = sp.roofSegmentStats.reduce((a, s) => a + (s.pitchDegrees ?? 15), 0) / sp.roofSegmentStats.length;
+  }
+
+  // --- PRODUÇÃO
   let estimatedProduction = 0;
+  let estimatedProductionDC = 0;
+  let estimatedProductionAC = 0;
   if (sp.solarPanelConfigs?.length && areaSource === "google") {
-    // Use Google's panel configs only if using Google's area calculation
     const best = sp.solarPanelConfigs.reduce((a, b) =>
       (b.yearlyEnergyDcKwh ?? 0) > (a.yearlyEnergyDcKwh ?? 0) ? b : a,
     );
-    estimatedProduction = Math.floor((best.yearlyEnergyDcKwh ?? 0) * (1 - 0.2 * shadeIndex));
+    estimatedProductionDC = Math.floor(best.yearlyEnergyDcKwh ?? 0);
+    estimatedProductionAC = Math.floor(estimatedProductionDC * INVERTER_EFF); // Patch: conversão DC→AC
+    estimatedProduction = estimatedProductionAC; // priorizar AC como resultado principal
   } else {
-    // Use GHI calculation for manual/polygon areas
-    const proxyGHI = (sp.maxSunshineHoursPerYear ?? 1500);
-    estimatedProduction = Math.floor(
-      estimateAnnualKwhByGHI({
-        ghi_kwh_m2_year: proxyGHI,
-        usable_area_m2: usableArea,
-        shade_index: shadeIndex,
-      }),
-    );
+    const pvgis = await getPVGISYield(lat, lng, avgTilt, avgAz).catch(() => null);
+    if (pvgis?.Ey_kwh_per_kwp_year) {
+      estimatedProduction = Math.round(
+        estimateByPVGIS_Ey({
+          Ey_kwh_per_kwp_year: pvgis.Ey_kwh_per_kwp_year,
+          usable_area_m2: usableArea,
+          shade_index: shadeIndex,
+        }),
+      );
+      estimatedProductionAC = estimatedProduction;
+    } else {
+      estimatedProduction = Math.round(
+        estimateByGHI({
+          ghi_kwh_m2_year,
+          usable_area_m2: usableArea,
+          shade_index: shadeIndex,
+          tilt_deg: avgTilt,
+          lat,
+        }),
+      );
+      estimatedProductionAC = estimatedProduction;
+    }
+    estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
   }
 
-  const avgAz =
-    sp.roofSegmentStats?.length
-      ? sp.roofSegmentStats.reduce((a, s) => a + (s.azimuthDegrees ?? 0), 0) / sp.roofSegmentStats.length
-      : 0;
-  const avgTilt =
-    sp.roofSegmentStats?.length
-      ? sp.roofSegmentStats.reduce((a, s) => a + (s.pitchDegrees ?? 15), 0) / sp.roofSegmentStats.length
-      : 15;
-
   const cls = classifyVerdict({
-    usable_area_m2: areaSource === "google" ? usableArea * usageFactor : usableArea,
+    usable_area_m2: usableArea,
     shade_index: shadeIndex,
     azimuth_deg: avgAz,
     tilt_deg: avgTilt,
   });
 
-  // Build footprints array if polygon provided
+  // Footprints
   const footprints = [];
   if (polygon?.coordinates?.length) {
     const ring = polygon.coordinates[0] as [number, number][];
@@ -350,16 +474,13 @@ function processGoogleSolarData(
     });
   }
 
-  // Nota técnica padrão para laudo
+  // Nota técnica
   let technicalNote =
-    "Nota técnica: Todos os cálculos deste laudo utilizam dados reais das fontes oficiais Google Solar API, PVGIS e NASA POWER. " +
-    "A área calculada por polígono pode ter variação de até ±5% conforme latitude, método de projeção e resolução dos dados. " +
-    "Recomenda-se validação in loco para projetos críticos.";
-  
-  // Add Microsoft footprint information if applicable
+    "Nota técnica: Produção estimada com base em Google Solar API (para geometrias e configs) + PVGIS (E_y) e NASA POWER (GHI). " +
+    "Áreas calculadas por polígono via fórmula geodésica esférica (WGS84), podendo variar conforme delineamento e resolução dos dados. " +
+    "Valores de produção priorizam AC (corrigido) e expõem DC para referência. Recomenda-se validação in loco para projetos críticos.";
   if (polygon?.source === "microsoft-footprint") {
-    technicalNote += " Footprint fornecido por Microsoft Building Footprints dataset, " +
-      "baseado em imagens de satélite e algoritmos de machine learning para detecção automática de estruturas.";
+    technicalNote += " Footprint: Microsoft Building Footprints (ML).";
   }
 
   return AnalysisSchema.parse({
@@ -367,18 +488,20 @@ function processGoogleSolarData(
     coordinates: { lat, lng },
     coverage: { google: true },
     confidence: "Alta",
-    usableArea: Math.max(0, Math.round(areaSource === "google" ? usableArea * usageFactor : usableArea)),
+    usableArea,
     areaSource,
-    annualIrradiation: Math.round(sp.maxSunshineHoursPerYear ?? 0),
-    irradiationSource: "Google Solar API",
+    annualGHI: Math.round(ghi_kwh_m2_year),
+    irradiationSource,
     shadingIndex: Number(shadeIndex.toFixed(2)),
     shadingLoss,
     estimatedProduction,
+    estimatedProductionAC,
+    estimatedProductionDC,
     verdict: cls.verdict,
     reasons: cls.reasons,
-    usageFactor,
+    usageFactor: applyUF,
     footprints,
-    googleSolarData: solar,
+    googleSolarData: { ...solar, derived: { avgAz, avgTilt, estimatedProductionDC, estimatedProductionAC, inverterEff: INVERTER_EFF } },
     technicalNote,
   });
 }
@@ -388,60 +511,73 @@ async function processFallbackAnalysis(opts: {
   lat: number;
   lng: number;
   address: string;
-  polygon?: { type: "Polygon"; coordinates: number[][][] };
+  polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn"|"microsoft-footprint"|"google-footprint" };
   usableAreaOverride?: number;
 }) {
   const { lat, lng, address, polygon, usableAreaOverride } = opts;
   const usageFactor = 0.75;
-  let usableArea = 60;
   let areaSource: "manual" | "estimate" | "footprint" = "estimate";
-
+  let usableAreaRaw = 60 / usageFactor;
   if (usableAreaOverride && usableAreaOverride > 0) {
-    usableArea = usableAreaOverride;
+    usableAreaRaw = usableAreaOverride;
     areaSource = "manual";
   } else if (polygon?.coordinates?.length) {
     const ring = polygon.coordinates[0] as [number, number][];
-    const polyArea = polygonAreaM2(ring);
-    usableArea = Math.max(0, polyArea * usageFactor);
-    areaSource = "manual";
+    usableAreaRaw = polygonAreaM2(ring);
+    areaSource = "footprint";
   }
+  const usableArea = Math.round(usableAreaRaw * usageFactor);
 
   let ghi_kwh_m2_year = 0;
   let irradiationSource = "";
-
-  const pvgis = await getPVGISYield(lat, lng).catch(() => null);
-  if (pvgis?.Ey_kwh_per_kwp_year) {
-    const eff = 0.20;
-    const pr = 0.75;
-    ghi_kwh_m2_year = pvgis.Ey_kwh_per_kwp_year / (eff * pr);
-    irradiationSource = "PVGIS (GHI estimado via E_y)";
+  const nasa = await getNASAGHI(lat, lng).catch(() => null);
+  if (nasa?.ghi_kwh_m2_year) {
+    ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
+    irradiationSource = "NASA POWER (GHI)";
   } else {
-    const nasa = await getNASAGHI(lat, lng).catch(() => null);
-    if (nasa?.ghi_kwh_m2_year) {
-      ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
-      irradiationSource = "NASA POWER (GHI)";
-    } else {
-      ghi_kwh_m2_year = 1500;
-      irradiationSource = "Heurística conservadora";
-    }
+    ghi_kwh_m2_year = 1800;
+    irradiationSource = "Heurística conservadora";
   }
 
-  const shadeIndex = 0.10;
-  const shadingLossPct = Math.round(0.2 * shadeIndex * 100);
+  const lower = address.toLowerCase();
+  const isUrban = lower.includes("rua ") || lower.includes("avenida ") || lower.includes("centro") || lower.includes("cidade");
+  const shadeIndex = isUrban ? 0.15 : 0.08;
+  const shadingLossPct = Math.round(shadeLossFracFromIndex(shadeIndex) * 100);
 
-  const estimatedProduction = Math.round(
-    estimateAnnualKwhByGHI({
-      ghi_kwh_m2_year,
-      usable_area_m2: usableArea,
-      shade_index: shadeIndex,
-    }),
-  );
+  let estimatedProduction = 0;
+  let estimatedProductionAC = 0;
+  let estimatedProductionDC = 0;
+  const optimalTilt = Math.max(5, Math.min(30, Math.abs(lat) - 10));
+  const pvgis = await getPVGISYield(lat, lng, optimalTilt, 0).catch(() => null);
+  if (pvgis?.Ey_kwh_per_kwp_year) {
+    estimatedProduction = Math.round(
+      estimateByPVGIS_Ey({
+        Ey_kwh_per_kwp_year: pvgis.Ey_kwh_per_kwp_year,
+        usable_area_m2: usableArea,
+        shade_index: shadeIndex,
+      }),
+    );
+    estimatedProductionAC = estimatedProduction;
+    estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
+  } else {
+    estimatedProduction = Math.round(
+      estimateByGHI({
+        ghi_kwh_m2_year,
+        usable_area_m2: usableArea,
+        shade_index: shadeIndex,
+        tilt_deg: optimalTilt,
+        lat,
+      }),
+    );
+    estimatedProductionAC = estimatedProduction;
+    estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
+  }
 
   const cls = classifyVerdict({
     usable_area_m2: usableArea,
     shade_index: shadeIndex,
     azimuth_deg: 0,
-    tilt_deg: 15,
+    tilt_deg: optimalTilt,
   });
 
   const footprints = [];
@@ -458,13 +594,12 @@ async function processFallbackAnalysis(opts: {
   }
 
   let technicalNote =
-    "Nota técnica: Todos os cálculos deste laudo utilizam dados reais das fontes públicas PVGIS e NASA POWER. " +
-    "A área do polígono é aproximada e pode apresentar margem de erro de até ±5%. Recomenda-se validação in loco para projetos de grande escala.";
-  
-  // Add Microsoft footprint information if applicable
+    `Nota técnica: Irradiação (GHI) via ${irradiationSource}. ` +
+    `Produção estimada com PVGIS (E_y) quando disponível, ou GHI + PR caso contrário. ` +
+    `Sombreamento estimado em ${Math.round(shadeIndex * 100)}% por contexto urbano/rural. ` +
+    `Tilt ótimo ≈ ${optimalTilt}°. Área por polígono via fórmula geodésica esférica (WGS84). Produção em AC e DC explicitadas.`;
   if (polygon?.source === "microsoft-footprint") {
-    technicalNote += " Footprint fornecido por Microsoft Building Footprints dataset, " +
-      "baseado em imagens de satélite e algoritmos de machine learning para detecção automática de estruturas.";
+    technicalNote += " Footprint: Microsoft Building Footprints (ML).";
   }
 
   return AnalysisSchema.parse({
@@ -472,13 +607,15 @@ async function processFallbackAnalysis(opts: {
     coordinates: { lat, lng },
     coverage: { google: false, fallback: "PVGIS/NASA" },
     confidence: "Média",
-    usableArea: Math.round(usableArea),
+    usableArea,
     areaSource,
-    annualIrradiation: Math.round(ghi_kwh_m2_year),
+    annualGHI: Math.round(ghi_kwh_m2_year),
     irradiationSource,
-    shadingIndex: shadeIndex,
+    shadingIndex: Number(shadeIndex.toFixed(2)),
     shadingLoss: shadingLossPct,
     estimatedProduction,
+    estimatedProductionAC,
+    estimatedProductionDC,
     verdict: cls.verdict,
     reasons: cls.reasons,
     usageFactor,
@@ -487,11 +624,7 @@ async function processFallbackAnalysis(opts: {
   });
 }
 
-/* ========= DATABASE REMOVED ========= */
-// Database saving logic moved to separate /save-analysis edge function
-
 /* ========= AUTH ========= */
-
 async function verifyAuth(req: Request) {
   const auth = req.headers.get("Authorization");
   if (!auth?.startsWith("Bearer ")) {
@@ -539,15 +672,14 @@ Deno.serve(async (req: Request) => {
     const json = await req.json();
     const input = AnalyzeRequestSchema.parse(json);
 
-    // 1) Use coordinates sent directly (no geocoding needed)
     const { lat, lng, address } = input;
     console.log(`Using coordinates directly: lat=${lat}, lng=${lng}, address="${address}"`);
 
-    // 2) Google Solar (se disponível)
+    // Google Solar primeiro, depois fallback
     let analysis;
     const google = await getGoogleSolarData(lat, lng).catch(() => null);
     if (google?.solarPotential) {
-      analysis = processGoogleSolarData(
+      analysis = await processGoogleSolarData(
         google,
         address,
         lat,
@@ -565,7 +697,6 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // 3) Return analysis data (without saving to database)
     return new Response(JSON.stringify({ success: true, data: analysis }), {
       status: 200,
       headers: { ...headers, "Content-Type": "application/json" },
@@ -574,7 +705,7 @@ Deno.serve(async (req: Request) => {
     const message = err instanceof Error ? err.message : "Internal error";
     return new Response(JSON.stringify({ success: false, error: message }), {
       status: 500,
-      headers: { ...corsHeaders(req.headers.get("origin")), "Content-Type": "application/json" },
+      headers: { ...headers, "Content-Type": "application/json" },
     });
   }
 });
