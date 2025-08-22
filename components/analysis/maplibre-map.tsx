@@ -203,6 +203,16 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       
       // Clear from session storage
       clearPinFromStorage();
+      
+      // Clear selected address and reset analysis context
+      setSelectedAddress('');
+      updateData({
+        address: '',
+        coordinates: null,
+        footprints: [],
+        usableArea: 0,
+        areaSource: 'manual' as const
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
@@ -479,7 +489,22 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         savePinToStorage([lng, lat], tempAddress);
       }
       
-      // Geocode in background - but don't update context states to avoid loops
+      // Update context data for analysis to work
+      updateData({
+        address: tempAddress,
+        coordinates: [lng, lat] as [number, number],
+        // Reset footprints when placing new pin
+        footprints: [],
+        usableArea: 0,
+        areaSource: 'manual' as const
+      });
+      
+      // Set selected address for analysis button to work
+      if (isUserPlaced) {
+        setSelectedAddress(tempAddress);
+      }
+      
+      // Geocode in background to get proper address
       setTimeout(async () => {
         try {
           const response = await fetch(
@@ -493,7 +518,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
             const result = await response.json();
             const address = result.display_name || tempAddress;
             
-            // Only update pin state, not context
+            // Update both pin state and context with real address
             setCurrentPin(prev => {
               if (prev && prev.coordinates[0] === lng && prev.coordinates[1] === lat) {
                 if (isUserPlaced) {
@@ -503,6 +528,15 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
               }
               return prev;
             });
+            
+            // Update context and selected address for analysis
+            if (isUserPlaced) {
+              updateData({
+                address: address,
+                coordinates: [lng, lat] as [number, number]
+              });
+              setSelectedAddress(address);
+            }
           }
         } catch (error) {
           console.error('Geocoding error:', error);
@@ -546,6 +580,18 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         address: savedPin.address,
         isUserPlaced: true
       });
+      
+      // Update context data for analysis to work
+      updateData({
+        address: savedPin.address,
+        coordinates: [lng, lat] as [number, number],
+        footprints: [],
+        usableArea: 0,
+        areaSource: 'manual' as const
+      });
+      
+      // Set selected address for analysis button to work
+      setSelectedAddress(savedPin.address);
       
       // Zoom to saved location
       map.current.flyTo({
