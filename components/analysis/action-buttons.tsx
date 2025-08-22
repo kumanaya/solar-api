@@ -176,7 +176,8 @@ export function ActionButtons() {
           }
         } else {
           // Footprint data returned but no valid footprint - user must draw manually
-          // Don't set hasFootprintFromAction - force manual drawing
+          // Explicitly set hasFootprintFromAction to false to ensure message shows
+          setHasFootprintFromAction(false);
           setFootprintNotFoundMessage('Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
         }
       } else {
@@ -188,19 +189,22 @@ export function ActionButtons() {
           case 'FOOTPRINT_NOT_FOUND':
             console.log('FOOTPRINT_NOT_FOUND - user must draw roof manually');
             setFootprintNotFoundMessage(result.error || 'Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
-            // Don't set hasFootprintFromAction - force manual drawing
+            // Explicitly set hasFootprintFromAction to false to ensure message shows
+            setHasFootprintFromAction(false);
             break;
             
           case 'FOOTPRINT_TIMEOUT':
             console.log('FOOTPRINT_TIMEOUT - user must draw roof manually');
             setFootprintNotFoundMessage('Busca por footprint demorou muito. Desenhe o telhado manualmente.');
-            // Don't set hasFootprintFromAction - force manual drawing
+            // Explicitly set hasFootprintFromAction to false to ensure message shows
+            setHasFootprintFromAction(false);
             break;
             
           case 'FOOTPRINT_INVALID':
             console.log('FOOTPRINT_INVALID - user must draw roof manually');
             setFootprintNotFoundMessage('Dados de footprint inválidos. Desenhe o telhado manualmente.');
-            // Don't set hasFootprintFromAction - force manual drawing
+            // Explicitly set hasFootprintFromAction to false to ensure message shows
+            setHasFootprintFromAction(false);
             break;
             
           case 'AUTH_REQUIRED':
@@ -230,7 +234,8 @@ export function ActionButtons() {
       console.error('Footprint search error:', error);
       
       // For unexpected errors during footprint search, user must draw manually
-      // Don't set hasFootprintFromAction - force manual drawing
+      // Explicitly set hasFootprintFromAction to false to ensure message shows
+      setHasFootprintFromAction(false);
       setFootprintNotFoundMessage('Erro inesperado ao buscar footprint. Desenhe o telhado manualmente.');
     } finally {
       setIsSearchingFootprints(false);
