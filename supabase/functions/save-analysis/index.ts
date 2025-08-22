@@ -113,7 +113,7 @@ async function saveAnalysisToDatabase(analysisData: any, userId: string, supabas
       recommendations: analysisData.recommendations,
       warnings: analysisData.warnings,
       footprints: analysisData.footprints,
-      google_solar_data: analysisData.googleSolarData,
+      google_solar_data: analysisData.googleSolarData ? JSON.parse(JSON.stringify(analysisData.googleSolarData)) : null,
       technical_note: analysisData.technicalNote
     };
     

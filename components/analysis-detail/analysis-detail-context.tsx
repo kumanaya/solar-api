@@ -4,51 +4,28 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 import { getAnalysisById, transformGetAnalysisData } from "@/lib/get-analysis-api";
 import { analyzeAddress } from "@/lib/analysis-api";
 
-export interface AnalysisVersion {
+import { AnalysisVersion as BaseAnalysisVersion, DetailedAnalysis as BaseDetailedAnalysis } from "@/lib/types/analysis";
+
+export interface AnalysisVersion extends BaseAnalysisVersion {
   id: string;
-  date: string;
-  confidence: "Alta" | "Média" | "Baixa";
-  usableArea: number;
-  annualGHI: number;
-  estimatedProduction: number;
-  verdict: "Apto" | "Parcial" | "Não apto";
   sources: string[];
   parameters: {
     usageFactor: number;
     tiltEstimated?: number;
   };
   variationFromPrevious?: number;
-  shadingIndex?: number;
-  shadingLoss?: number;
-  shadingSource?: "google_measured" | "user_input" | "description" | "heuristic";
-  estimatedProductionAC?: number;
-  estimatedProductionDC?: number;
-  estimatedProductionYear1?: number;
-  estimatedProductionYear25?: number;
-  temperatureLosses?: number;
-  degradationFactor?: number;
-  effectivePR?: number;
 }
 
-export interface DetailedAnalysis {
+export interface DetailedAnalysis extends BaseDetailedAnalysis {
   id: string;
   address: string;
-  coordinates: [number, number];
   createdAt: string;
   lastUpdated: string;
-  currentVersion: AnalysisVersion;
   history: AnalysisVersion[];
   polygon: {
     coordinates: [number, number][];
     area: number;
   };
-  footprints: Array<{
-    id: string;
-    coordinates: [number, number][];
-    area: number;
-    isActive: boolean;
-    source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
-  }>;
   sources: {
     pvgis: boolean;
     nasa: boolean;
@@ -56,10 +33,6 @@ export interface DetailedAnalysis {
     google: boolean;
   };
   reprocessCount: number;
-  technicalNote?: string;
-  reasons: string[];
-  recommendations?: string[];
-  warnings?: string[];
 }
 
 interface AnalysisDetailContextType {
@@ -120,26 +93,30 @@ const transformApiDataToDetailedAnalysis = (apiData: ReturnType<typeof transform
     area: apiData.usableArea
   };
 
-  return {
-    id: apiData.id,
-    address: apiData.address,
-    coordinates: [apiData.coordinates[1], apiData.coordinates[0]], // lat, lng
-    createdAt: apiData.createdAt,
-    lastUpdated: apiData.createdAt,
-    currentVersion,
-    history,
-    polygon,
-    footprints: apiData.footprints,
-    sources: {
-      pvgis: apiData.irradiationSource.includes('PVGIS'),
-      nasa: apiData.irradiationSource.includes('NASA'),
-      solcast: apiData.irradiationSource.includes('Solcast'),
-      google: apiData.coverage.google
-    },
-    reprocessCount: 0, // TODO: Implement reprocess count in database
-    technicalNote: apiData.technicalNote,
-    reasons: apiData.reasons
-  };
+        return {
+        id: apiData.id,
+        address: apiData.address,
+        coordinates: [apiData.coordinates[1], apiData.coordinates[0]], // lat, lng
+        createdAt: apiData.createdAt,
+        lastUpdated: apiData.createdAt,
+        currentVersion,
+        history,
+        polygon,
+        footprints: apiData.footprints,
+        sources: {
+          pvgis: apiData.irradiationSource.includes('PVGIS'),
+          nasa: apiData.irradiationSource.includes('NASA'),
+          solcast: apiData.irradiationSource.includes('Solcast'),
+          google: apiData.coverage.google
+        },
+        coverage: {
+          google: apiData.coverage.google,
+          dataQuality: apiData.coverage.dataQuality || "estimated"
+        },
+        reprocessCount: 0, // TODO: Implement reprocess count in database
+        technicalNote: apiData.technicalNote,
+        reasons: apiData.reasons
+      };
 };
 
 export function AnalysisDetailProvider({ 
