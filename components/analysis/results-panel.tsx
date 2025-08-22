@@ -11,6 +11,34 @@ export function ResultsPanel() {
   const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading, setHasAnalysisResults } = useAnalysis();
   
   const { isFootprintError } = useErrorHandler();
+  
+  // Function to determine if error should be hidden from banner
+  const shouldHideErrorFromBanner = (errorMessage: string | null): boolean => {
+    if (!errorMessage) return false;
+    
+    const footprintKeywords = [
+      'footprint',
+      'Nenhum footprint',
+      'footprint encontrado',
+      'FOOTPRINT_NOT_FOUND',
+      'Desenhe o telhado',
+      'buscar footprint',
+      'footprints'
+    ];
+    
+    const lowercaseError = errorMessage.toLowerCase();
+    return footprintKeywords.some(keyword => lowercaseError.includes(keyword.toLowerCase()));
+  };
+  
+  // Only show error in banner if it's not a footprint-related error
+  const shouldShowErrorBanner = error && !shouldHideErrorFromBanner(error);
+  
+  // Debug logging
+  if (error) {
+    console.log('ResultsPanel error detected:', error);
+    console.log('shouldHideErrorFromBanner:', shouldHideErrorFromBanner(error));
+    console.log('shouldShowErrorBanner:', shouldShowErrorBanner);
+  }
 
 
   // Modal de sem créditos
@@ -50,31 +78,22 @@ export function ResultsPanel() {
 
       {/* Conteúdo principal */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Banner de erro */}
-        {error && (
+        {/* Banner de erro - Only show non-footprint errors */}
+        {shouldShowErrorBanner && (
           <div className={`border rounded-lg p-3 ${
-            isFootprintError() 
-              ? 'bg-amber-50 border-amber-200'
-              : error.includes('autenticado') || error.includes('login')
+            error!.includes('autenticado') || error!.includes('login')
               ? 'bg-destructive/10 border-destructive/20'
               : 'bg-muted/50 border-border'
           }`}>
             <div className="flex items-start space-x-2">
               <AlertCircle className={`h-4 w-4 mt-0.5 flex-shrink-0 ${
-                isFootprintError()
-                  ? 'text-amber-600'
-                  : error.includes('autenticado') || error.includes('login')
+                error!.includes('autenticado') || error!.includes('login')
                   ? 'text-destructive'
                   : 'text-orange-500'
               }`} />
               <div>
                 <p className="text-sm text-foreground">{error}</p>
-                {isFootprintError() && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    💡 Use a ferramenta &quot;Desenhar Telhado&quot; no mapa
-                  </p>
-                )}
-                {!error.includes('autenticado') && !error.includes('login') && !isFootprintError() && (
+                {!error!.includes('autenticado') && !error!.includes('login') && (
                   <p className="text-xs text-muted-foreground mt-1">
                     Tentando fonte alternativa...
                   </p>

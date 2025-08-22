@@ -56,10 +56,13 @@ export function ActionButtons() {
       return;
     }
 
-
     setIsSearchingFootprints(true);
+    // Clear all previous errors and messages  
     setError(null);
     setFootprintNotFoundMessage(null);
+    // IMPORTANT: Reset hasFootprintFromAction when starting new search
+    setHasFootprintFromAction(false);
+    console.log('Starting footprint search - cleared all errors and reset hasFootprintFromAction');
 
     try {
       const [lng, lat] = data.coordinates;
@@ -89,21 +92,63 @@ export function ActionButtons() {
           const locationSource = data.address.includes(',') && data.address.includes('.') ? 'pin' : 'endereço';
           alert(`Footprint encontrado usando ${locationSource}! Área: ${footprintData.area}m² (${footprintData.source})`);
         } else {
+          // Footprint data returned but no valid footprint - user must draw manually
+          // Don't set hasFootprintFromAction - force manual drawing
           setFootprintNotFoundMessage('Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
         }
       } else {
-        // Tratar especificamente o erro FOOTPRINT_NOT_FOUND
-        if (result.errorCode === 'FOOTPRINT_NOT_FOUND') {
-          setFootprintNotFoundMessage(result.error || 'Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
-        } else {
-          // Usar sistema de códigos de erro padronizado para outros erros
-          const errorInfo = handleError(result.error || 'Erro ao buscar footprints', result.errorCode);
-          setError(errorInfo.userMessage);
+        // Handle errors based on errorCode only, not status codes
+        console.log('Footprint API error - errorCode:', result.errorCode);
+        
+        // Route errors based on errorCode
+        switch (result.errorCode) {
+          case 'FOOTPRINT_NOT_FOUND':
+            console.log('FOOTPRINT_NOT_FOUND - user must draw roof manually');
+            setFootprintNotFoundMessage(result.error || 'Nenhum footprint encontrado para esta localização. Desenhe o telhado manualmente.');
+            // Don't set hasFootprintFromAction - force manual drawing
+            break;
+            
+          case 'FOOTPRINT_TIMEOUT':
+            console.log('FOOTPRINT_TIMEOUT - user must draw roof manually');
+            setFootprintNotFoundMessage('Busca por footprint demorou muito. Desenhe o telhado manualmente.');
+            // Don't set hasFootprintFromAction - force manual drawing
+            break;
+            
+          case 'FOOTPRINT_INVALID':
+            console.log('FOOTPRINT_INVALID - user must draw roof manually');
+            setFootprintNotFoundMessage('Dados de footprint inválidos. Desenhe o telhado manualmente.');
+            // Don't set hasFootprintFromAction - force manual drawing
+            break;
+            
+          case 'AUTH_REQUIRED':
+          case 'AUTH_EXPIRED':
+          case 'AUTH_INVALID':
+            console.log('Auth error detected - showing in error banner');
+            const errorInfo = handleError(result.error || 'Erro de autenticação', result.errorCode);
+            setError(errorInfo.userMessage);
+            break;
+            
+          case 'INSUFFICIENT_CREDITS':
+            console.log('Credits error detected - showing in error banner');
+            const creditsError = handleError(result.error || 'Créditos insuficientes', result.errorCode);
+            setError(creditsError.userMessage);
+            break;
+            
+          // All other errors (network, server, etc.) during footprint search
+          // are treated as "footprint not available" - user must draw manually
+          default:
+            console.log('Other error during footprint search - user must draw roof manually');
+            setFootprintNotFoundMessage('Footprint não disponível no momento. Desenhe o telhado manualmente.');
+            // Don't set hasFootprintFromAction - force manual drawing
+            break;
         }
       }
     } catch (error) {
       console.error('Footprint search error:', error);
-      setError(error instanceof Error ? error.message : 'Erro inesperado ao buscar footprints');
+      
+      // For unexpected errors during footprint search, user must draw manually
+      // Don't set hasFootprintFromAction - force manual drawing
+      setFootprintNotFoundMessage('Erro inesperado ao buscar footprint. Desenhe o telhado manualmente.');
     } finally {
       setIsSearchingFootprints(false);
     }
@@ -114,6 +159,12 @@ export function ActionButtons() {
   const handleRunAnalysis = async () => {
     if (!selectedAddress) {
       setError('Nenhum endereço selecionado para análise');
+      return;
+    }
+    
+    // Check if footprint search was performed first
+    if (!hasFootprintFromAction && data.footprints.length === 0 && !currentPolygon) {
+      setError('Execute primeiro a busca de footprint automático antes de fazer a análise');
       return;
     }
     
@@ -215,11 +266,37 @@ export function ActionButtons() {
       setIsLoading(false);
     }
   };
-  const canAnalyze = selectedAddress;
+  const canAnalyze = selectedAddress && (hasFootprintFromAction || data.footprints.length > 0 || currentPolygon);
+  
+  // Debug logging for canAnalyze
+  console.log('ActionButtons canAnalyze check:', {
+    selectedAddress: !!selectedAddress,
+    hasFootprintFromAction,
+    footprintsLength: data.footprints.length,
+    hasCurrentPolygon: !!currentPolygon,
+    canAnalyze
+  });
 
   return (
     <>
       <div className="space-y-3">
+        {/* Botão de buscar footprints - agora vem primeiro */}
+        {data.coordinates && (
+          <Button 
+            variant="outline" 
+            onClick={handleSearchFootprints}
+            disabled={isSearchingFootprints}
+            className="w-full"
+          >
+            {isSearchingFootprints ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Search className="mr-2 h-4 w-4" />
+            )}
+            {isSearchingFootprints ? 'Buscando...' : 'Buscar Footprint Automático'}
+          </Button>
+        )}
+
         {/* Botão principal - Executar Análise */}
         <Button 
           onClick={handleRunAnalysis}
@@ -233,38 +310,26 @@ export function ActionButtons() {
           )}
           {isAnalyzing ? 'Analisando...' : 'Executar Análise'}
         </Button>
-        
-
-
-      {/* Botão de buscar footprints */}
-      {data.coordinates && (
-        <Button 
-          variant="outline" 
-          onClick={handleSearchFootprints}
-          disabled={isSearchingFootprints}
-          className="w-full"
-        >
-          {isSearchingFootprints ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Search className="mr-2 h-4 w-4" />
-          )}
-          {isSearchingFootprints ? 'Buscando...' : 'Buscar Footprint Automático'}
-        </Button>
-      )}
       
 
         {/* Informações adicionais */}
         <div className="text-xs text-muted-foreground text-center pt-2 border-t space-y-1">
-          {!canAnalyze && (
+          {!selectedAddress && (
             <p className="text-amber-600">
               Selecione um endereço para executar análise
             </p>
           )}
-          {footprintNotFoundMessage && (
-            <p className="text-orange-600">
-              {footprintNotFoundMessage}
-            </p>
+          {/* Show specific footprint message if available, otherwise show generic instruction */}
+          {selectedAddress && !hasFootprintFromAction && data.footprints.length === 0 && !currentPolygon && (
+            footprintNotFoundMessage ? (
+              <p className="text-orange-600">
+                {footprintNotFoundMessage}
+              </p>
+            ) : (
+              <p className="text-amber-600">
+                Execute a busca de footprint automático ou desenhe o telhado manualmente
+              </p>
+            )
           )}
           {data.footprints.length > 0 && hasFootprintFromAction && (
             <p className="text-green-600">

@@ -197,7 +197,16 @@ export function detectErrorCode(errorMessage: string): ErrorCode {
     return ERROR_CODES.GEOCODING_FAILED;
   }
   
-  if (message.includes('function not found') || message.includes('404')) {
+  if (message.includes('function not found')) {
+    return ERROR_CODES.FUNCTION_NOT_FOUND;
+  }
+  
+  // Check specifically for footprint-related 404s
+  if (message.includes('404') && (message.includes('footprint') || message.includes('buscar footprint'))) {
+    return ERROR_CODES.FOOTPRINT_NOT_FOUND;
+  }
+  
+  if (message.includes('404')) {
     return ERROR_CODES.FUNCTION_NOT_FOUND;
   }
   
