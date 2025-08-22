@@ -635,7 +635,7 @@ export function SystemConfigCard({
           <span className="text-2xl font-bold">{totalPower.toFixed(1)}</span>
           <span className="text-sm text-muted-foreground ml-1">kWp</span>
         </div>
-        <Badge variant="outline" className="text-purple-600">
+        <Badge variant="outline">
           {maxPanels} painéis
         </Badge>
       </div>
