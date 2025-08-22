@@ -234,16 +234,6 @@ export function ActionButtons() {
           {isAnalyzing ? 'Analisando...' : 'Executar Análise'}
         </Button>
         
-        {/* Botão - Gerar PDF */}
-        <Button 
-          onClick={handleOpenPDFModal}
-          className="w-full"
-          variant="outline"
-          disabled={!data.estimatedProduction || data.estimatedProduction === 0}
-        >
-          <FileText className="mr-2 h-4 w-4" />
-          Gerar PDF do Laudo
-        </Button>
 
 
       {/* Botão de buscar footprints */}
@@ -263,16 +253,6 @@ export function ActionButtons() {
         </Button>
       )}
       
-      <div className="grid grid-cols-1 gap-2">
-        <Button 
-          variant="outline" 
-          onClick={handleAddProposal}
-          disabled={!data.estimatedProduction || data.estimatedProduction === 0}
-        >
-          <DollarSign className="mr-2 h-4 w-4" />
-          Adicionar Proposta
-        </Button>
-      </div>
 
         {/* Informações adicionais */}
         <div className="text-xs text-muted-foreground text-center pt-2 border-t space-y-1">
