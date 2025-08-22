@@ -52,9 +52,11 @@ export function CoverageStatus() {
           <div className="flex-1">
             <p className="text-sm font-medium">Status de Cobertura</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {data.coverage.google 
-                ? "Google: dados disponíveis." 
-                : `Google: indisponível aqui. ${data.coverage.fallback}.`
+              {data.coverage.google || data.irradiationSource?.includes('Google') || data.areaSource === 'google'
+                ? "Google: dados disponíveis e sendo utilizados." 
+                : data.irradiationSource?.includes('PVGIS') || data.irradiationSource?.includes('NASA')
+                  ? "Google: indisponível aqui. Usando fontes alternativas (PVGIS + NASA)."
+                  : `Google: indisponível aqui. ${data.coverage.fallback || 'Usando estimativas regionais'}.`
               }
             </p>
           </div>
