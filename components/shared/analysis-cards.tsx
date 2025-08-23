@@ -854,14 +854,14 @@ export function ConfidenceCard({
           <div className="flex items-start gap-2 p-2 border rounded-md">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-xs text-muted-foreground">
-                Para melhorar a precisão, considere:
+              <div className="text-xs text-muted-foreground">
+                <p>Para melhorar a precisão, considere:</p>
                 <ul className="list-disc list-inside mt-1">
                   <li>Medições locais de irradiação</li>
                   <li>Análise detalhada de sombreamento</li>
                   <li>Levantamento topográfico</li>
                 </ul>
-              </p>
+              </div>
             </div>
           </div>
         </div>
