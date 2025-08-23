@@ -60,6 +60,10 @@ const AnalyzeRequestSchema = z.object({
   averageTemperature: z.number().min(15).max(35).optional(),
   moduleType: z.enum(["monocristalino", "policristalino", "filme_fino"]).optional(),
   systemAge: z.number().min(0).max(30).optional(),
+  // Reprocessing parameters
+  tiltEstimated: z.number().min(0).max(60).optional(),
+  preferredSource: z.enum(["PVGIS", "NASA"]).optional(),
+  updateFootprint: z.boolean().optional(),
 });
 
 const AnalysisSchema = z.object({
@@ -567,6 +571,9 @@ async function processGoogleSolarData(
   averageTemperature?: number,
   moduleType?: string,
   systemAge?: number,
+  tiltEstimated?: number,
+  preferredSource?: "PVGIS" | "NASA",
+  updateFootprint?: boolean,
 ) {
   const sp = solar.solarPotential!;
   const wholeArea = sp.wholeRoofStats?.areaMeters2 ?? 0;
@@ -623,22 +630,37 @@ async function processGoogleSolarData(
   // --- GHI ---
   let ghi_kwh_m2_year = 0;
   let irradiationSource = "";
-  const nasa = await getNASAGHI(lat, lng).catch(() => null);
-  if (nasa?.ghi_kwh_m2_year) {
-    ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
-    irradiationSource = "NASA POWER (GHI)";
-  } else if (isBrazil) {
-    ghi_kwh_m2_year = getBrazilianTypicalGHI(lat);
-    irradiationSource = "Valores típicos brasileiros";
+  
+  if (preferredSource === "NASA") {
+    // Force NASA as preferred source
+    const nasa = await getNASAGHI(lat, lng).catch(() => null);
+    if (nasa?.ghi_kwh_m2_year) {
+      ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
+      irradiationSource = "NASA POWER (GHI) - Fonte Preferida";
+    }
+  } else if (preferredSource === "PVGIS") {
+    // PVGIS will be handled later in production calculation
+    ghi_kwh_m2_year = isBrazil ? getBrazilianTypicalGHI(lat) : 1800;
+    irradiationSource = "PVGIS - Fonte Preferida";
   } else {
-    ghi_kwh_m2_year = 1800;
-    irradiationSource = "Heurística conservadora";
+    // Default behavior - try NASA first
+    const nasa = await getNASAGHI(lat, lng).catch(() => null);
+    if (nasa?.ghi_kwh_m2_year) {
+      ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
+      irradiationSource = "NASA POWER (GHI)";
+    } else if (isBrazil) {
+      ghi_kwh_m2_year = getBrazilianTypicalGHI(lat);
+      irradiationSource = "Valores típicos brasileiros";
+    } else {
+      ghi_kwh_m2_year = 1800;
+      irradiationSource = "Heurística conservadora";
+    }
   }
 
   // --- ORIENTAÇÃO/INCLINAÇÃO ---
   let avgAz = 0;
-  let avgTilt = 15;
-  if (sp.roofSegmentStats?.length) {
+  let avgTilt = tiltEstimated ?? 15; // Use tiltEstimated if provided, otherwise default
+  if (sp.roofSegmentStats?.length && !tiltEstimated) {
     const azArr = sp.roofSegmentStats.map(s => s.azimuthDegrees ?? 0);
     avgAz = circularMean(azArr);
     avgTilt = sp.roofSegmentStats.reduce((a, s) => a + (s.pitchDegrees ?? 15), 0) / sp.roofSegmentStats.length;
@@ -663,8 +685,11 @@ async function processGoogleSolarData(
     estimatedProductionYear1 = estimatedProductionAC;
     estimatedProductionYear25 = Math.floor(estimatedProductionAC * Math.pow(1 - ANNUAL_DEGRADATION, 25));
   } else {
-    const pvgis = await getPVGISYield(lat, lng, avgTilt, avgAz).catch(() => null);
-    if (pvgis?.Ey_kwh_per_kwp_year) {
+    // Check if PVGIS is preferred or should be used
+    const shouldUsePVGIS = preferredSource === "PVGIS" || !preferredSource;
+    const pvgis = shouldUsePVGIS ? await getPVGISYield(lat, lng, avgTilt, avgAz).catch(() => null) : null;
+    
+    if (pvgis?.Ey_kwh_per_kwp_year && (preferredSource === "PVGIS" || !preferredSource)) {
       estimatedProduction = Math.round(
         estimateByPVGIS_Ey({
           Ey_kwh_per_kwp_year: pvgis.Ey_kwh_per_kwp_year,
@@ -675,7 +700,7 @@ async function processGoogleSolarData(
           system_age: age,
         }),
       );
-      irradiationSource += " + PVGIS (E_y)";
+      irradiationSource += preferredSource === "PVGIS" ? " + PVGIS (E_y) - Fonte Preferida" : " + PVGIS (E_y)";
     } else {
       estimatedProduction = Math.round(
         estimateByGHI({
@@ -804,8 +829,11 @@ async function processFallbackAnalysis(params: {
   averageTemperature?: number;
   moduleType?: string;
   systemAge?: number;
+  tiltEstimated?: number;
+  preferredSource?: "PVGIS" | "NASA";
+  updateFootprint?: boolean;
 }) {
-  const { lat, lng, address, polygon } = params;
+  const { lat, lng, address, polygon, tiltEstimated, preferredSource, updateFootprint } = params;
   const isBrazil = isBrazilianCoordinate(lat, lng);
 
   // --- ÁREA ÚTIL ---
@@ -1063,6 +1091,9 @@ Deno.serve(async (req: Request) => {
         input.averageTemperature,
         input.moduleType,
         input.systemAge,
+        input.tiltEstimated,
+        input.preferredSource,
+        input.updateFootprint,
       );
     } else {
       console.log("Usando fallback PVGIS/NASA (quando Google não retorna dados)");
@@ -1077,6 +1108,9 @@ Deno.serve(async (req: Request) => {
         averageTemperature: input.averageTemperature,
         moduleType: input.moduleType,
         systemAge: input.systemAge,
+        tiltEstimated: input.tiltEstimated,
+        preferredSource: input.preferredSource,
+        updateFootprint: input.updateFootprint,
       });
     }
 

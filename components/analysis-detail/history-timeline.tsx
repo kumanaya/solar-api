@@ -266,8 +266,8 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
       {/* Footer com informações */}
       <div className="border-t p-4">
         <div className="text-xs text-muted-foreground space-y-1">
-          <p>💡 Reprocessamentos atualizam os cálculos com dados mais recentes</p>
-          <p>📊 Variações são calculadas em relação à versão anterior</p>
+          <p>* Reprocessamentos atualizam os cálculos com dados mais recentes</p>
+          <p>* Variações são calculadas em relação à versão anterior</p>
         </div>
       </div>
     </div>

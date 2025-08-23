@@ -27,9 +27,9 @@ import { toast } from "sonner";
 type ProcessingStep = "sources" | "calculation" | "validation" | "completed" | "error";
 
 const stepLabels: Record<ProcessingStep, string> = {
-  "sources": "Atualizando fontes de dados...",
-  "calculation": "Recalculando métricas...",
-  "validation": "Validando resultados...",
+  "sources": "Coletando dados atualizados das fontes...",
+  "calculation": "Aplicando novos parâmetros e recalculando...",
+  "validation": "Validando e finalizando resultados...",
   "completed": "Reprocessamento concluído!",
   "error": "Erro no reprocessamento"
 };
@@ -73,20 +73,31 @@ export function ReprocessModal() {
   };
 
   const simulateProgress = async () => {
-    const steps: ProcessingStep[] = ["sources", "calculation", "validation"];
+    const steps: { step: ProcessingStep; duration: number }[] = [
+      { step: "sources", duration: 2000 },      // 2s - Coletando dados das fontes
+      { step: "calculation", duration: 3500 },  // 3.5s - Recalculando com novos parâmetros
+      { step: "validation", duration: 1500 }    // 1.5s - Validando resultados
+    ];
     
     for (let i = 0; i < steps.length; i++) {
-      setCurrentStep(steps[i]);
+      const { step, duration } = steps[i];
+      setCurrentStep(step);
       
       const stepProgress = (i / steps.length) * 100;
       const nextStepProgress = ((i + 1) / steps.length) * 100;
       
-      for (let p = stepProgress; p <= nextStepProgress; p += 3) {
-        setProgress(p);
-        await new Promise(resolve => setTimeout(resolve, 60));
-      }
+      // Progressive loading with variable speed to feel more natural
+      const totalIncrements = Math.floor(duration / 100); // 100ms intervals
+      const progressIncrement = (nextStepProgress - stepProgress) / totalIncrements;
       
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      for (let j = 0; j < totalIncrements; j++) {
+        const currentProgress = stepProgress + (j * progressIncrement);
+        setProgress(Math.min(currentProgress, nextStepProgress));
+        
+        // Variable delay to make it feel more realistic
+        const delay = 80 + Math.random() * 40; // 80-120ms random intervals
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
     
     setProgress(100);
@@ -102,14 +113,16 @@ export function ReprocessModal() {
         usageFactor,
         tiltEstimated: autoTilt ? undefined : tiltEstimated,
         preferredSource,
-        updateFootprint
+        updateFootprint,
+        usableAreaOverride: Math.round((analysis?.polygon.area || 0) * usageFactor)
       };
 
-      // Simular progresso
-      await simulateProgress();
+      // Start progress simulation and actual reprocessing in parallel
+      const progressPromise = simulateProgress();
+      const reprocessPromise = reprocessAnalysis(parameters);
       
-      // Chamar API de reprocessamento
-      await reprocessAnalysis(parameters);
+      // Wait for both to complete
+      await Promise.all([progressPromise, reprocessPromise]);
       
       toast.success("Análise reprocessada com sucesso!", {
         description: "Os novos resultados estão disponíveis.",
@@ -134,7 +147,7 @@ export function ReprocessModal() {
       setHasError(true);
       
       toast.error("Erro no reprocessamento", {
-        description: "Não foi possível atualizar a análise. Tente novamente.",
+        description: error instanceof Error ? error.message : "Não foi possível atualizar a análise. Tente novamente.",
       });
     } finally {
       setIsProcessing(false);
@@ -235,8 +248,7 @@ export function ReprocessModal() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="PVGIS">PVGIS (Recomendado)</SelectItem>
-                  <SelectItem value="NASA">NASA SRTM</SelectItem>
-                  <SelectItem value="Solcast">Solcast</SelectItem>
+                  <SelectItem value="NASA">NASA POWER</SelectItem>
                 </SelectContent>
               </Select>
             </div>

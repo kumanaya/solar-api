@@ -64,7 +64,13 @@ const AnalysisSchema = z.object({
     source: z.string()
   })),
   googleSolarData: z.any().optional(),
-  technicalNote: z.string()
+  technicalNote: z.string(),
+  originalAnalysisId: z.string().uuid().optional(),
+  reprocessParameters: z.object({
+    tiltEstimated: z.number().optional(),
+    preferredSource: z.string().optional(),
+    updateFootprint: z.boolean().optional()
+  }).optional()
 });
 
 const SaveAnalysisRequestSchema = z.object({
@@ -116,7 +122,9 @@ async function saveAnalysisToDatabase(analysisData: z.infer<typeof AnalysisSchem
       warnings: analysisData.warnings,
       footprints: analysisData.footprints,
       google_solar_data: analysisData.googleSolarData || null,
-      technical_note: analysisData.technicalNote
+      technical_note: analysisData.technicalNote,
+      original_analysis_id: analysisData.originalAnalysisId || null,
+      reprocess_parameters: analysisData.reprocessParameters || null
     };
     
     console.log('Insert data prepared:', JSON.stringify(insertData, null, 2));

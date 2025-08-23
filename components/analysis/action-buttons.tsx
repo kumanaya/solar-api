@@ -71,6 +71,7 @@ export function ActionButtons() {
       // Validate and prepare analysis data for saving using schema
       const analysisDataToSave = {
         ...data,
+        address: selectedAddress || data.address, // Use selectedAddress which contains the actual address
         coordinates: Array.isArray(data.coordinates) 
           ? { lat: data.coordinates[1], lng: data.coordinates[0] }
           : data.coordinates
