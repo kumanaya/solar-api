@@ -316,10 +316,29 @@ export function AnalysisDetailProvider({
       setError(null);
       console.log("Duplicating analysis:", analysis.address);
       
-      // For now, redirect to new analysis page with the same address
-      // In the future, we could copy the polygon and parameters
-      const encodedAddress = encodeURIComponent(analysis.address);
-      window.open(`/dashboard/analysis?address=${encodedAddress}`, '_blank');
+      // Prepare data to set in the analysis store
+      const duplicateData = {
+        address: analysis.address,
+        coordinates: [analysis.coordinates[1], analysis.coordinates[0]] as [number, number], // Convert back to [lng, lat]
+        polygon: analysis.polygon.coordinates.length > 0 ? {
+          type: "Polygon" as const,
+          coordinates: [analysis.polygon.coordinates],
+          source: "user-drawn" as const
+        } : null,
+        footprints: analysis.footprints?.length > 0 ? analysis.footprints.map(fp => ({
+          ...fp,
+          isActive: true
+        })) : [],
+        timestamp: Date.now()
+      };
+
+      // Use Zustand store to set duplicate data
+      const { useAnalysisStore } = await import('@/lib/stores/analysis-store');
+      const { setDuplicateData } = useAnalysisStore.getState();
+      setDuplicateData(duplicateData);
+      
+      // Navigate to new analysis page
+      window.open('/dashboard/analysis', '_blank');
       
     } catch (error) {
       console.error('Error duplicating analysis:', error);

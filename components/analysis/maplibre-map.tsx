@@ -257,17 +257,54 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
 
     const style = getMapStyle(layer);
 
-    map.current = new maplibregl.Map({
-      container: mapContainer.current,
-      style: style,
-      center: [-46.6333, -23.5505], // São Paulo default
-      zoom: 12,
-      attributionControl: false // We'll add our own attribution control
-    });
+    // Function to initialize map with given center
+    const initializeMap = (center: [number, number], zoom: number = 12) => {
+      if (!mapContainer.current) return;
+      
+      map.current = new maplibregl.Map({
+        container: mapContainer.current,
+        style: style,
+        center: center,
+        zoom: zoom,
+        attributionControl: false // We'll add our own attribution control
+      });
 
-    map.current.on('load', () => {
-      setIsMapLoaded(true);
-    });
+      map.current.on('load', () => {
+        setIsMapLoaded(true);
+      });
+    };
+
+    // Check if coordinates are the default São Paulo coordinates (not user-set)
+    const isDefaultCoordinates = data.coordinates[0] === -46.6333 && data.coordinates[1] === -23.5505;
+    const hasValidUserCoordinates = data.coordinates[0] && data.coordinates[1] && !isDefaultCoordinates;
+
+    // Try to get user's geolocation first if coordinates are still default
+    if (navigator.geolocation && isDefaultCoordinates) {
+      console.log('Attempting to get user location...');
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          console.log('User location obtained:', { latitude, longitude });
+          
+          // Just initialize map with user location, don't save to store yet
+          initializeMap([longitude, latitude], 15); // Higher zoom for user location
+        },
+        (error) => {
+          console.log('Geolocation failed:', error.message, 'Using default location');
+          initializeMap([-46.6333, -23.5505]); // São Paulo default
+        },
+        {
+          timeout: 5000,
+          enableHighAccuracy: false,
+          maximumAge: 300000 // 5 minutes cache
+        }
+      );
+    } else {
+      // Use existing coordinates (either user-set or default São Paulo)
+      const center: [number, number] = [data.coordinates[0], data.coordinates[1]];
+      initializeMap(center);
+    }
 
     // Don't add navigation controls (zoom and compass) - removed per user request
     // Don't add default attribution control - we'll create a custom one
@@ -313,10 +350,18 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     const [lng, lat] = data.coordinates;
     if (isNaN(lng) || isNaN(lat)) return;
     
+    // Skip if coordinates are the default São Paulo coordinates (not user-generated)
+    if (lng === -46.6333 && lat === -23.5505) {
+      console.log('Skipping flyTo for default São Paulo coordinates');
+      return;
+    }
+    
     // Skip if we already have a pin at these coordinates
     if (currentPin && currentPin.coordinates[0] === lng && currentPin.coordinates[1] === lat) {
       return;
     }
+    
+    console.log('Navigation effect triggered - flying to:', [lng, lat]);
     
     // Fly to the location
     map.current.flyTo({
@@ -592,7 +637,10 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     if (!map.current || !isMapLoaded || currentPin) return;
 
     const savedPin = loadPinFromStorage();
-    if (savedPin && savedPin.coordinates && savedPin.address) {
+    // Only load saved pin if we have a selected address or it's not default coordinates
+    if (savedPin && savedPin.coordinates && savedPin.address && 
+        (data.address || (data.coordinates[0] !== -46.6333 && data.coordinates[1] !== -23.5505))) {
+      console.log('Loading saved pin from storage:', savedPin);
       const [lng, lat] = savedPin.coordinates;
       
       // Create marker

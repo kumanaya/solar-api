@@ -7,11 +7,15 @@ import { AnalysisProvider } from "@/components/analysis/analysis-context";
 import { ChevronLeft, ChevronRight, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useDuplicateInitialization } from "@/lib/hooks/use-duplicate-initialization";
 
 export default function AnalysisPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+
+  // Initialize duplicate data if available
+  useDuplicateInitialization();
 
   useEffect(() => {
     // Simular carregamento inicial
