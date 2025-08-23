@@ -88,7 +88,27 @@ export const AnalysisSchema = z.object({
   apiErrors: z.record(z.string(), z.string()).optional(),
   fallbackReasons: z.array(z.string()).optional(),
   nasaPowerData: z.any().optional(),
-  pvgisData: z.any().optional()
+  pvgisData: z.any().optional(),
+
+  // Imagery metadata fields
+  imageryMetadata: z.object({
+    source: z.enum(["google_solar", "esri_world_imagery"]).optional(),
+    imageryDate: z.object({
+      year: z.number(),
+      month: z.number(),
+      day: z.number()
+    }).optional(),
+    imageryProcessedDate: z.object({
+      year: z.number(),
+      month: z.number(),
+      day: z.number()
+    }).optional(),
+    imageryQuality: z.string().optional(),
+    // Esri specific fields
+    resolution: z.string().optional(),
+    accuracy: z.string().optional(),
+    sourceInfo: z.string().optional()
+  }).optional()
 });
 
 // Types

@@ -9,7 +9,8 @@ import {
   ProductionCard,
   VerdictCard,
   SystemConfigCard,
-  SystemLifetimeCard
+  SystemLifetimeCard,
+  ImageryInfoCard
 } from "@/components/shared/analysis-cards";
 
 export function TechnicalResults() {
@@ -80,6 +81,10 @@ export function TechnicalResults() {
       <VerdictCard
         verdict={data.verdict}
         reasons={data.reasons}
+      />
+
+      <ImageryInfoCard
+        googleSolarData={data.googleSolarData}
       />
     </div>
   );

@@ -49,6 +49,13 @@ interface GetAnalysisResponse {
     usageFactor: number;
     googleSolarData?: object;
     technicalNote?: string;
+    imageryMetadata?: {
+      source?: "google_solar" | "esri_world_imagery";
+      captureDate?: string;
+      resolution?: string;
+      sourceInfo?: string;
+      accuracy?: string;
+    };
     createdAt: string;
   };
   error?: string;
@@ -193,6 +200,7 @@ export function transformGetAnalysisData(apiData: GetAnalysisResponse['data']) {
     usageFactor: apiData.usageFactor,
     googleSolarData: apiData.googleSolarData,
     technicalNote: apiData.technicalNote,
+    imageryMetadata: apiData.imageryMetadata,
     createdAt: apiData.createdAt
   };
 }

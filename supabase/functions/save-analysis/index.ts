@@ -86,6 +86,14 @@ const AnalysisSchema = z.object({
   fallbackReasons: z.array(z.string()).optional(),
   nasaPowerData: z.any().optional(),
   pvgisData: z.any().optional(),
+  // Imagery metadata fields
+  imageryMetadata: z.object({
+    source: z.enum(["google_solar", "esri_world_imagery"]).optional(),
+    captureDate: z.string().optional(),
+    resolution: z.string().optional(),
+    sourceInfo: z.string().optional(),
+    accuracy: z.string().optional()
+  }).optional(),
 });
 
 const SaveAnalysisRequestSchema = z.object({
@@ -152,6 +160,7 @@ async function saveAnalysisToDatabase(
       fallback_reasons: analysisData.fallbackReasons || [],
       nasa_power_data: analysisData.nasaPowerData || null,
       pvgis_data: analysisData.pvgisData || null,
+      imagery_metadata: analysisData.imageryMetadata || null,
     };
 
     const { data, error } = await supabase

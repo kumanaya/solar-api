@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Coverage, Footprint } from "@/lib/types/analysis";
+import { useState, useEffect } from "react";
+import { useAnalysis } from "@/components/analysis/analysis-context";
 import {
   Square,
   Sun,
@@ -1040,6 +1042,309 @@ export function WarningsCard({
               <p className="text-sm text-orange-800">{warning}</p>
             </div>
           ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export interface ImageryInfoCardProps {
+  googleSolarData?: {
+    imageryDate?: { year: number; month: number; day: number };
+    imageryProcessedDate?: { year: number; month: number; day: number };
+    imageryQuality?: string;
+  };
+  isLocked?: boolean;
+}
+
+export function ImageryInfoCard({
+  googleSolarData,
+  isLocked = false,
+}: ImageryInfoCardProps) {
+  const [esriImageryData, setEsriImageryData] = useState<{
+    captureDate?: string;
+    resolution?: string;
+    source?: string;
+    accuracy?: string;
+  } | null>(null);
+  const [isLoadingEsri, setIsLoadingEsri] = useState(false);
+
+  // Get analysis data which now includes imageryMetadata
+  const { data, updateData } = useAnalysis();
+  
+  // Check if we have Google Solar imagery metadata from the database
+  const imageryMetadata = data?.imageryMetadata;
+  const hasGoogleData = imageryMetadata?.imageryDate || imageryMetadata?.imageryProcessedDate || 
+    googleSolarData?.imageryDate || googleSolarData?.imageryProcessedDate;
+  
+  // Always fetch Esri data to show map imagery info (independent of Google Solar data)
+  const shouldFetchEsri = !esriImageryData && !isLoadingEsri;
+
+  // Function to fetch Esri imagery metadata when no Google Solar data
+  const fetchEsriImageryMetadata = async (lat: number, lng: number) => {
+    try {
+      setIsLoadingEsri(true);
+      
+      // Query Esri World Imagery Citations layer
+      const response = await fetch(
+        `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/4/query?` +
+        `where=1%3D1&geometry=${lng}%2C${lat}&geometryType=esriGeometryPoint&` +
+        `inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&` +
+        `outFields=SRC_DATE2%2CSRC_RES%2CSRC_ACC%2CNICE_DESC%2CNICE_NAME%2CSRC_DATE&` +
+        `orderByFields=SRC_DATE2%20DESC&resultRecordCount=1&f=json`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.features && data.features.length > 0) {
+          const attributes = data.features[0].attributes;
+          const esriData = {
+            captureDate: attributes.SRC_DATE2 || attributes.SRC_DATE,
+            resolution: attributes.SRC_RES,
+            source: attributes.NICE_DESC || attributes.NICE_NAME,
+            accuracy: attributes.SRC_ACC
+          };
+          
+          setEsriImageryData(esriData);
+          
+          // Salvar os metadados Esri no estado da análise para serem enviados ao banco
+          // Parse da data do Esri (formato: YYYY-MM-DD ou timestamp)
+          let imageryDate;
+          if (esriData.captureDate) {
+            try {
+              const date = new Date(esriData.captureDate);
+              if (!isNaN(date.getTime())) {
+                imageryDate = {
+                  year: date.getFullYear(),
+                  month: date.getMonth() + 1,
+                  day: date.getDate()
+                };
+              }
+            } catch (error) {
+              console.warn('Erro ao parsear data do Esri:', error);
+            }
+          }
+          
+          updateData({
+            imageryMetadata: {
+              source: "esri_world_imagery",
+              ...(imageryDate && { imageryDate }),
+              resolution: esriData.resolution ? String(esriData.resolution) : undefined,
+              sourceInfo: esriData.source,
+              accuracy: esriData.accuracy ? String(esriData.accuracy) : undefined
+            }
+          });
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch Esri imagery metadata:', error);
+    } finally {
+      setIsLoadingEsri(false);
+    }
+  };
+
+  // Fetch Esri data only when needed
+  useEffect(() => {
+    if (shouldFetchEsri && data?.coordinates) {
+      const coords = typeof data.coordinates === 'object' && 'lat' in data.coordinates 
+        ? data.coordinates 
+        : { lat: data.coordinates[1], lng: data.coordinates[0] };
+      
+      fetchEsriImageryMetadata(coords.lat, coords.lng);
+    }
+  }, [shouldFetchEsri, data?.coordinates]);
+
+  // Always show card - either with Google Solar data or Esri map imagery data
+  // Only hide if we have no coordinates to fetch Esri data from
+  if (!data?.coordinates && !hasGoogleData && !esriImageryData && !isLoadingEsri) {
+    return null;
+  }
+
+  // Use data from imageryMetadata (database) or fallback to googleSolarData prop
+  const imageryDate = imageryMetadata?.imageryDate || googleSolarData?.imageryDate;
+  const imageryProcessedDate = imageryMetadata?.imageryProcessedDate || googleSolarData?.imageryProcessedDate;
+  const imageryQuality = imageryMetadata?.imageryQuality || googleSolarData?.imageryQuality;
+
+  const formatDate = (dateObj: { year: number; month: number; day: number }): string => {
+    const date = new Date(dateObj.year, dateObj.month - 1, dateObj.day);
+    return date.toLocaleDateString('pt-BR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const calculateImageAge = (dateObj: { year: number; month: number; day: number }): string => {
+    const imageDate = new Date(dateObj.year, dateObj.month - 1, dateObj.day);
+    const today = new Date();
+    const diffTime = Math.abs(today.getTime() - imageDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 30) {
+      return `${diffDays} dias`;
+    } else if (diffDays < 365) {
+      const months = Math.floor(diffDays / 30);
+      return `${months} ${months === 1 ? 'mês' : 'meses'}`;
+    } else {
+      const years = Math.floor(diffDays / 365);
+      const remainingMonths = Math.floor((diffDays % 365) / 30);
+      if (remainingMonths === 0) {
+        return `${years} ${years === 1 ? 'ano' : 'anos'}`;
+      }
+      return `${years} ${years === 1 ? 'ano' : 'anos'} e ${remainingMonths} ${remainingMonths === 1 ? 'mês' : 'meses'}`;
+    }
+  };
+
+  const getQualityColor = (quality?: string): string => {
+    if (!quality) return "bg-gray-100 text-gray-800";
+    
+    const lowerQuality = quality.toLowerCase();
+    if (lowerQuality.includes('high') || lowerQuality.includes('alta')) {
+      return "bg-green-100 text-green-800";
+    } else if (lowerQuality.includes('medium') || lowerQuality.includes('média')) {
+      return "bg-yellow-100 text-yellow-800";
+    } else if (lowerQuality.includes('low') || lowerQuality.includes('baixa')) {
+      return "bg-red-100 text-red-800";
+    }
+    return "bg-gray-100 text-gray-800";
+  };
+
+  const formatEsriDate = (dateStr: string): string => {
+    try {
+      // Esri date format can vary, try to parse it
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('pt-BR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+      }
+      return dateStr; // Return as-is if can't parse
+    } catch {
+      return dateStr;
+    }
+  };
+
+  return (
+    <Card className="relative w-full">
+      {isLocked && (
+        <div className="absolute top-3 right-3">
+          <Lock className="h-4 w-4 text-muted-foreground" />
+        </div>
+      )}
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">
+          Metadados da Imagem
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {/* Seção 1: Metadados da Análise Google Solar */}
+          {hasGoogleData && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b">
+                <h4 className="text-sm font-medium">Análise Google Solar</h4>
+                <Badge variant="outline" className="text-xs">Google Solar</Badge>
+              </div>
+              
+              <div className="space-y-3 text-sm">
+                {imageryDate && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Data da Captura:</span>
+                    <div className="text-right">
+                      <div className="font-medium">{formatDate(imageryDate)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Há {calculateImageAge(imageryDate)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {imageryProcessedDate && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Data do Processamento:</span>
+                    <div className="text-right">
+                      <div className="font-medium">{formatDate(imageryProcessedDate)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Processada há {calculateImageAge(imageryProcessedDate)}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {imageryQuality && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Qualidade:</span>
+                    <Badge className={getQualityColor(imageryQuality)}>
+                      {imageryQuality}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Seção 2: Metadados da Imagem do Mapa */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b">
+              <h4 className="text-sm font-medium">Imagem do Mapa</h4>
+              <Badge variant="outline" className="text-xs">Esri World Imagery</Badge>
+            </div>
+
+            {isLoadingEsri && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                Buscando metadados da imagem...
+              </div>
+            )}
+
+            {esriImageryData && (
+              <div className="space-y-3 text-sm">
+                {esriImageryData.captureDate && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Data da Imagem:</span>
+                    <span className="font-medium text-right">
+                      {formatEsriDate(esriImageryData.captureDate)}
+                    </span>
+                  </div>
+                )}
+                
+                {esriImageryData.resolution && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Resolução:</span>
+                    <span className="font-medium">
+                      {esriImageryData.resolution}
+                    </span>
+                  </div>
+                )}
+
+                {esriImageryData.source && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Provedor:</span>
+                    <span className="font-medium">
+                      {esriImageryData.source}
+                    </span>
+                  </div>
+                )}
+
+                {esriImageryData.accuracy && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Precisão:</span>
+                    <Badge className="bg-gray-100 text-gray-800">
+                      {esriImageryData.accuracy}
+                    </Badge>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!esriImageryData && !isLoadingEsri && (
+              <p className="text-sm text-muted-foreground">
+                Metadados da imagem não disponíveis
+              </p>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

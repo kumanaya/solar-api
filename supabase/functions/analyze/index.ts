@@ -1257,6 +1257,53 @@ async function processGoogleSolarData(
   };
 }
 
+// Function to fetch Esri World Imagery metadata
+async function getEsriImageryMetadata(lat: number, lng: number) {
+  console.log(`🗺️ Buscando metadados Esri para coordenadas: ${lat}, ${lng}`);
+  
+  try {
+    const url = `https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/4/query?` +
+      `where=1%3D1&geometry=${lng}%2C${lat}&geometryType=esriGeometryPoint&` +
+      `inSR=4326&spatialRel=esriSpatialRelIntersects&returnGeometry=false&` +
+      `outFields=SRC_DATE2%2CSRC_RES%2CSRC_ACC%2CNICE_DESC%2CNICE_NAME%2CSRC_DATE&` +
+      `orderByFields=SRC_DATE2%20DESC&resultRecordCount=1&f=json`;
+    
+    console.log(`🔗 URL da requisição Esri: ${url}`);
+    
+    const response = await fetchWithTimeout(url, 5000);
+    
+    console.log(`📡 Resposta Esri status: ${response.status}`);
+    
+    if (response.ok) {
+      const data = await response.json();
+      console.log(`📊 Dados Esri recebidos:`, JSON.stringify(data, null, 2));
+      
+      if (data.features && data.features.length > 0) {
+        const attributes = data.features[0].attributes;
+        const metadata = {
+          source: "esri_world_imagery",
+          captureDate: attributes.SRC_DATE2 || attributes.SRC_DATE,
+          resolution: attributes.SRC_RES,
+          sourceInfo: attributes.NICE_DESC || attributes.NICE_NAME,
+          accuracy: attributes.SRC_ACC
+        };
+        
+        console.log(`✅ Metadados Esri processados:`, JSON.stringify(metadata, null, 2));
+        return metadata;
+      } else {
+        console.warn(`⚠️ Nenhum feature encontrado nos dados Esri`);
+      }
+    } else {
+      console.error(`❌ Resposta Esri não OK: ${response.status}`);
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('❌ Erro ao buscar metadados Esri:', error);
+    return null;
+  }
+}
+
 // Fallback robusto quando não há Google Solar disponível
 async function processFallbackAnalysis({
   lat,
@@ -1516,7 +1563,7 @@ async function processFallbackAnalysis({
     apiErrors: apiTracker.errors,
     fallbackReasons: apiTracker.fallbackReasons,
     nasaPowerData: apiTracker.nasaPowerData,
-    pvgisData: apiTracker.pvgisData,
+    pvgisData: apiTracker.pvgisData
   };
 }
 
@@ -1631,6 +1678,9 @@ Deno.serve(async (req: Request) => {
         analysis.annualIrradiation = Number(analysis.annualIrradiation ?? 0);
       }
     }
+
+    // Os metadados da imagem do mapa (Esri) são agora buscados e salvos pelo frontend
+    // no componente ImageryInfoCard quando o usuário visualiza os resultados
 
     const response = {
       success: true,
