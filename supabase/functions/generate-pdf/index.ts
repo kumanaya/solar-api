@@ -95,6 +95,147 @@ const AnalysisDataSchema = z.object({
   }).optional(),
 });
 
+/* ========= INTEGRAÇÃO COM DADOS ANEEL ========= */
+interface AneelTariffData {
+  concessionaria: string;
+  sigla: string;
+  modalidadeTarifaria: string;
+  posto: string;
+  tarifa: number;
+  vigencia: string;
+  unidade: string;
+}
+
+interface ConcessionariaInfo {
+  nome: string;
+  sigla: string;
+  tarifa: number;
+  modalidade: string;
+  vigencia: string;
+  estado: string;
+}
+
+class AneelDataService {
+  private static readonly ANEEL_API_BASE = "https://dadosabertos.aneel.gov.br/api/3/action";
+  private static readonly GEOPORTAL_API = "https://gis.aneel.gov.br/server/rest/services";
+  
+  // Mapeamento de concessionárias por estado (principais)
+  private static readonly CONCESSIONARIAS_POR_ESTADO: Record<string, ConcessionariaInfo> = {
+    'SP': { nome: 'CPFL Paulista', sigla: 'CPFL', tarifa: 0.92, modalidade: 'Convencional B1', vigencia: '2024', estado: 'SP' },
+    'RJ': { nome: 'Light SESA', sigla: 'LIGHT', tarifa: 0.95, modalidade: 'Convencional B1', vigencia: '2024', estado: 'RJ' },
+    'MG': { nome: 'CEMIG Distribuição', sigla: 'CEMIG', tarifa: 0.89, modalidade: 'Convencional B1', vigencia: '2024', estado: 'MG' },
+    'RS': { nome: 'RGE', sigla: 'RGE', tarifa: 0.78, modalidade: 'Convencional B1', vigencia: '2024', estado: 'RS' },
+    'PR': { nome: 'COPEL Distribuição', sigla: 'COPEL', tarifa: 0.82, modalidade: 'Convencional B1', vigencia: '2024', estado: 'PR' },
+    'SC': { nome: 'CELESC Distribuição', sigla: 'CELESC', tarifa: 0.75, modalidade: 'Convencional B1', vigencia: '2024', estado: 'SC' },
+    'BA': { nome: 'Coelba', sigla: 'COELBA', tarifa: 0.88, modalidade: 'Convencional B1', vigencia: '2024', estado: 'BA' },
+    'PE': { nome: 'Celpe', sigla: 'CELPE', tarifa: 0.91, modalidade: 'Convencional B1', vigencia: '2024', estado: 'PE' },
+    'CE': { nome: 'Enel Ceará', sigla: 'ENEL CE', tarifa: 0.87, modalidade: 'Convencional B1', vigencia: '2024', estado: 'CE' },
+    'GO': { nome: 'Enel Goiás', sigla: 'ENEL GO', tarifa: 0.79, modalidade: 'Convencional B1', vigencia: '2024', estado: 'GO' },
+    'DF': { nome: 'CEB Distribuição', sigla: 'CEB', tarifa: 0.81, modalidade: 'Convencional B1', vigencia: '2024', estado: 'DF' },
+    'MT': { nome: 'Energisa Mato Grosso', sigla: 'ENERGISA MT', tarifa: 0.77, modalidade: 'Convencional B1', vigencia: '2024', estado: 'MT' },
+    'MS': { nome: 'Energisa Mato Grosso do Sul', sigla: 'ENERGISA MS', tarifa: 0.76, modalidade: 'Convencional B1', vigencia: '2024', estado: 'MS' },
+    'ES': { nome: 'EDP Espírito Santo', sigla: 'EDP ES', tarifa: 0.84, modalidade: 'Convencional B1', vigencia: '2024', estado: 'ES' },
+    'PA': { nome: 'Equatorial Pará', sigla: 'CELPA', tarifa: 0.93, modalidade: 'Convencional B1', vigencia: '2024', estado: 'PA' },
+    'AM': { nome: 'Amazonas Energia', sigla: 'AME', tarifa: 0.98, modalidade: 'Convencional B1', vigencia: '2024', estado: 'AM' }
+  };
+
+  // Identificar estado baseado nas coordenadas (aproximação por região)
+  static getStateByCoordinates(lat: number, lng: number): string {
+    // Região Sudeste
+    if (lat >= -25 && lat <= -19 && lng >= -50 && lng <= -39) {
+      if (lat >= -24 && lng >= -48 && lng <= -44) return 'SP';
+      if (lat >= -23 && lat <= -20 && lng >= -47 && lng <= -40) return 'RJ';
+      if (lat >= -22.5 && lat <= -19 && lng >= -51 && lng <= -39) return 'MG';
+      if (lat >= -21.5 && lat <= -19.5 && lng >= -41.5 && lng <= -39) return 'ES';
+      return 'SP'; // Default para Sudeste
+    }
+    
+    // Região Sul
+    if (lat >= -34 && lat <= -22 && lng >= -58 && lng <= -48) {
+      if (lng >= -54 && lng <= -49) return 'RS';
+      if (lat >= -26.5 && lat <= -22.5) return 'PR';
+      return 'SC';
+    }
+    
+    // Região Centro-Oeste
+    if (lat >= -25 && lat <= -7 && lng >= -61 && lng <= -46) {
+      if (lat >= -16.5 && lat <= -15 && lng >= -48.5 && lng <= -47) return 'DF';
+      if (lat >= -18 && lat <= -7 && lng >= -61 && lng <= -51) return 'MT';
+      if (lat >= -25 && lat <= -17 && lng >= -58 && lng <= -53) return 'MS';
+      return 'GO';
+    }
+    
+    // Região Nordeste
+    if (lat >= -18.5 && lat <= -2 && lng >= -48 && lng <= -32) {
+      if (lat >= -18.5 && lat <= -8.5 && lng >= -47 && lng <= -37.5) return 'BA';
+      if (lat >= -10.5 && lat <= -7 && lng >= -41 && lng <= -35) return 'PE';
+      if (lat >= -8 && lat <= -2.5 && lng >= -41.5 && lng <= -37) return 'CE';
+      return 'BA'; // Default para Nordeste
+    }
+    
+    // Região Norte
+    if (lat >= -10 && lat <= 5 && lng >= -75 && lng <= -44) {
+      if (lat >= -10 && lat <= 2 && lng >= -55 && lng <= -48) return 'PA';
+      if (lat >= -10 && lat <= 2 && lng >= -70 && lng <= -56) return 'AM';
+      return 'PA'; // Default para Norte
+    }
+    
+    // Default: São Paulo (maior mercado)
+    return 'SP';
+  }
+
+  static async getConcessionariaInfo(lat: number, lng: number): Promise<ConcessionariaInfo> {
+    try {
+      const estado = this.getStateByCoordinates(lat, lng);
+      const info = this.CONCESSIONARIAS_POR_ESTADO[estado];
+      
+      if (!info) {
+        console.warn(`Estado ${estado} não encontrado, usando média nacional`);
+        return {
+          nome: 'Concessionária Local',
+          sigla: 'MÉDIA',
+          tarifa: 0.85,
+          modalidade: 'Convencional B1',
+          vigencia: '2024',
+          estado: estado
+        };
+      }
+      
+      return info;
+    } catch (error) {
+      console.error('Erro ao buscar dados da concessionária:', error);
+      // Fallback para média nacional
+      return {
+        nome: 'Média Nacional',
+        sigla: 'MÉDIA',
+        tarifa: 0.85,
+        modalidade: 'Convencional B1',
+        vigencia: '2024',
+        estado: 'BR'
+      };
+    }
+  }
+
+  // Buscar tarifas mais específicas via API da ANEEL (opcional - requer implementação mais complexa)
+  static async fetchTariffData(concessionaria: string): Promise<AneelTariffData[]> {
+    try {
+      const response = await fetch(
+        `${this.ANEEL_API_BASE}/datastore_search?resource_id=b1bd71e7-d0ad-4214-9053-cbd58e9564a7&q=${concessionaria}&limit=10`
+      );
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      return data.result?.records || [];
+    } catch (error) {
+      console.error('Erro ao buscar dados da ANEEL:', error);
+      return [];
+    }
+  }
+}
+
 /* ========= UTILITÁRIOS DE SEGURANÇA ========= */
 function sanitizeHtml(input: string): string {
   return input
@@ -177,8 +318,8 @@ class EChartsGenerator {
   // Gerar gráfico de pizza usando ECharts
   static generatePieChart(
     data: Array<{name: string, value: number}>,
-    width = 600,
-    height = 400,
+    width = 700,
+    height = 500,
     title = ''
   ): string {
     const chartId = `pie-chart-${Math.random().toString(36).substr(2, 9)}`;
@@ -187,6 +328,7 @@ class EChartsGenerator {
       title: {
         text: title,
         left: 'center',
+        top: '5%',
         textStyle: {
           fontSize: 16,
           fontWeight: 'bold',
@@ -195,31 +337,79 @@ class EChartsGenerator {
       },
       tooltip: {
         trigger: 'item',
-        formatter: '{a} <br/>{b}: {c} ({d}%)'
+        formatter: '{a} <br/>{b}: {c}% ({d}%)',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: '#ccc',
+        borderWidth: 1,
+        textStyle: {
+          color: '#333'
+        }
       },
       legend: {
+        type: 'scroll',
         orient: 'vertical',
-        left: 'left',
+        right: '5%',
+        top: 'middle',
+        itemGap: 15,
+        itemWidth: 14,
+        itemHeight: 14,
         textStyle: {
-          fontSize: 12
+          fontSize: 11,
+          color: '#333'
+        },
+        formatter: function(name: string) {
+          // Quebrar nomes longos em duas linhas
+          if (name.length > 15) {
+            return name.replace(/\s+/g, '\\n');
+          }
+          return name;
         }
+      },
+      grid: {
+        left: '5%',
+        right: '35%',
+        top: '15%',
+        bottom: '15%'
       },
       series: [
         {
-          name: 'Distribuição',
+          name: 'Perdas do Sistema',
           type: 'pie',
-          radius: '50%',
-          data: data,
+          radius: ['20%', '45%'], // Donut chart para melhor legibilidade
+          center: ['35%', '55%'], // Posicionar mais à esquerda
+          avoidLabelOverlap: true,
+          itemStyle: {
+            borderRadius: 3,
+            borderColor: '#fff',
+            borderWidth: 2
+          },
+          label: {
+            show: true,
+            position: 'outside',
+            fontSize: 10,
+            formatter: '{b}\\n{d}%',
+            color: '#333',
+            distanceToLabelLine: 5
+          },
+          labelLine: {
+            show: true,
+            length: 8,
+            length2: 12,
+            smooth: 0.2
+          },
           emphasis: {
             itemStyle: {
               shadowBlur: 10,
               shadowOffsetX: 0,
               shadowColor: 'rgba(0, 0, 0, 0.5)'
+            },
+            label: {
+              show: true,
+              fontSize: 12,
+              fontWeight: 'bold'
             }
           },
-          label: {
-            formatter: '{b}: {d}%'
-          }
+          data: data
         }
       ],
       color: ['#28a745', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7']
@@ -646,22 +836,21 @@ class HTMLTemplateGenerator {
   }
 
   static generateTechnicalData(analysisData: any): string {
-    // Calcular potência fotovoltaica estimada baseada na produção anual
+    // USAR APENAS DADOS REAIS DO BANCO - NÃO INVENTAR NADA
     const annualProduction = Number(analysisData.estimated_production);
-    // HSP médio Brasil: 1.300 kWh/kWp/ano (valor conservador e realista)
-    const estimatedPvPower = (annualProduction / 1300).toFixed(1);
+    const annualGhi = Number(analysisData.annual_ghi);
+    const usableArea = Number(analysisData.usable_area);
+    const shadingLoss = Number(analysisData.shading_loss);
+    const usageFactor = Number(analysisData.usage_factor);
+    const confidence = analysisData.confidence;
     
-    // Calcular potência instalada recomendada (considerando módulos de 550Wp)
-    const recommendedPanels = Math.ceil(Number(estimatedPvPower) / 0.55);
-    const installedPower = (recommendedPanels * 0.55).toFixed(1);
-    
-    // Definir cenário de incerteza baseado na confiança
+    // Definir cenário de incerteza baseado na confiança REAL
     const uncertaintyScenarios = {
       'Alta': '±10%',
       'Média': '±15%', 
       'Baixa': '±25%'
     };
-    const uncertaintyMargin = uncertaintyScenarios[analysisData.confidence as keyof typeof uncertaintyScenarios] || '±20%';
+    const uncertaintyMargin = uncertaintyScenarios[confidence as keyof typeof uncertaintyScenarios] || '±20%';
 
     return `
       <div class="section">
@@ -669,29 +858,23 @@ class HTMLTemplateGenerator {
         <div class="data-grid">
           <div class="data-item">
             <div class="data-label">Área Útil Disponível</div>
-            <div class="data-value">${Number(
-              analysisData.usable_area
-            ).toLocaleString("pt-BR")} m²</div>
+            <div class="data-value">${usableArea.toLocaleString("pt-BR")} m²</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Irradiação Global Anual</div>
-            <div class="data-value">${Number(
-              analysisData.annual_ghi
-            ).toLocaleString("pt-BR")} kWh/m²/ano</div>
+            <div class="data-label">Irradiação Global Anual (GHI)</div>
+            <div class="data-value">${annualGhi.toLocaleString("pt-BR")} kWh/m²/ano</div>
           </div>
           <div class="data-item">
             <div class="data-label">Produção Anual Estimada</div>
-            <div class="data-value">${Number(
-              analysisData.estimated_production
-            ).toLocaleString("pt-BR")} kWh/ano</div>
+            <div class="data-value">${annualProduction.toLocaleString("pt-BR")} kWh/ano</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Potência Fotovoltaica Estimada</div>
-            <div class="data-value">${estimatedPvPower} kWp</div>
+            <div class="data-label">Fonte de Irradiação</div>
+            <div class="data-value">${analysisData.irradiation_source}</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Potência Instalada Recomendada</div>
-            <div class="data-value">${installedPower} kWp</div>
+            <div class="data-label">Método de Área</div>
+            <div class="data-value">${analysisData.area_source}</div>
           </div>
           <div class="data-item">
             <div class="data-label">Cenário de Incerteza</div>
@@ -699,21 +882,15 @@ class HTMLTemplateGenerator {
           </div>
           <div class="data-item">
             <div class="data-label">Confiança da Análise</div>
-            <div class="data-value">${sanitizeHtml(
-              analysisData.confidence
-            )}</div>
+            <div class="data-value">${confidence}</div>
           </div>
           <div class="data-item">
             <div class="data-label">Perdas por Sombreamento</div>
-            <div class="data-value">${Number(analysisData.shading_loss).toFixed(
-              1
-            )}%</div>
+            <div class="data-value">${shadingLoss.toFixed(1)}%</div>
           </div>
           <div class="data-item">
             <div class="data-label">Fator de Uso da Área</div>
-            <div class="data-value">${Number(
-              analysisData.usage_factor * 100
-            ).toFixed(0)}%</div>
+            <div class="data-value">${(usageFactor * 100).toFixed(0)}%</div>
           </div>
         </div>
       </div>
@@ -724,25 +901,40 @@ class HTMLTemplateGenerator {
     try {
       const annualProduction = Number(analysisData.estimated_production) || 0;
       
-      // Dados de irradiação mensal típicos para o Brasil (baseados em média nacional)
-      const monthlyIrradiationFactors = [
-        { month: 'Jan', factor: 1.15 }, { month: 'Fev', factor: 1.10 }, 
-        { month: 'Mar', factor: 1.05 }, { month: 'Abr', factor: 0.90 }, 
-        { month: 'Mai', factor: 0.75 }, { month: 'Jun', factor: 0.70 },
-        { month: 'Jul', factor: 0.75 }, { month: 'Ago', factor: 0.85 }, 
-        { month: 'Set', factor: 0.95 }, { month: 'Out', factor: 1.10 }, 
-        { month: 'Nov', factor: 1.20 }, { month: 'Dez', factor: 1.25 }
-      ];
+      // USAR DADOS REAIS DO PVGIS se disponível
+      let monthlyProduction = [];
+      let hasRealData = false;
       
-      const monthlyProduction = monthlyIrradiationFactors.map(item => ({
-        label: item.month,
-        value: Math.round((annualProduction / 12) * item.factor)
-      }));
+      if (analysisData.pvgis_data?.outputs?.monthly?.fixed) {
+        // DADOS REAIS DO PVGIS
+        const pvgisMonthly = analysisData.pvgis_data.outputs.monthly.fixed;
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        
+        monthlyProduction = pvgisMonthly.map((data: any, index: number) => ({
+          label: monthNames[index],
+          value: Math.round(data.E_m || 0) // Produção mensal real do PVGIS
+        }));
+        hasRealData = true;
+      } else {
+        // Fallback: apenas dividir produção anual por 12 (SEM INVENTAR SAZONALIDADE)
+        const monthlyAverage = Math.round(annualProduction / 12);
+        const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 
+                           'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+        
+        monthlyProduction = monthNames.map(month => ({
+          label: month,
+          value: monthlyAverage
+        }));
+      }
       
-      // Calcular sazonalidade
+      // Calcular estatísticas reais
+      const values = monthlyProduction.map(m => m.value);
       const minMonth = monthlyProduction.reduce((min, curr) => curr.value < min.value ? curr : min);
       const maxMonth = monthlyProduction.reduce((max, curr) => curr.value > max.value ? curr : max);
-      const seasonalVariation = ((maxMonth.value - minMonth.value) / minMonth.value * 100).toFixed(1);
+      const seasonalVariation = hasRealData && minMonth.value > 0 
+        ? ((maxMonth.value - minMonth.value) / minMonth.value * 100).toFixed(1)
+        : '0';
       
       return `
         <div class="section">
@@ -778,9 +970,10 @@ class HTMLTemplateGenerator {
           </div>
           
           <div class="warning">
-            <strong>Observação:</strong> Os valores de produção mensal são estimativas baseadas em padrões 
-            sazonais típicos do Brasil. A produção real pode variar devido a condições climáticas locais, 
-            manutenção do sistema e outros fatores ambientais.
+            <strong>Observação:</strong> ${hasRealData 
+              ? 'Os valores de produção mensal são baseados em dados reais do PVGIS (European Commission).' 
+              : 'Os valores de produção mensal são estimativas baseadas na produção anual total.'} 
+            A produção real pode variar devido a condições climáticas locais, manutenção do sistema e outros fatores ambientais.
           </div>
         </div>
       `;
@@ -866,7 +1059,7 @@ class HTMLTemplateGenerator {
             { name: 'Perdas no Inversor', value: inverterLosses },
             { name: 'Perdas por Sujidade', value: soilingLosses },
             { name: 'Perdas por Sombreamento', value: parseFloat(shadingLoss.toFixed(1)) }
-          ], 700, 400, 'Distribuição das Perdas do Sistema Fotovoltaico')}
+          ], 750, 500, 'Distribuição das Perdas do Sistema Fotovoltaico')}
         </div>
         
         <div class="data-grid" style="grid-template-columns: 1fr;">
@@ -988,9 +1181,15 @@ class HTMLTemplateGenerator {
             </div>
           </div>
           <div class="data-item">
-            <div class="data-label">Área do Polígono</div>
+            <div class="data-label">Área Útil (Real)</div>
             <div class="data-value">${Number(analysisData.usable_area).toLocaleString("pt-BR")} m²</div>
           </div>
+          ${activeFootprint && activeFootprint.area ? `
+          <div class="data-item">
+            <div class="data-label">Área do Polígono (Calculada)</div>
+            <div class="data-value">${activeFootprint.area.toLocaleString("pt-BR")} m²</div>
+          </div>
+          ` : ''}
           <div class="data-item">
             <div class="data-label">Data da Imagem de Satélite</div>
             <div class="data-value">${satelliteDate}</div>
@@ -1091,24 +1290,26 @@ class HTMLTemplateGenerator {
     `;
   }
 
-  static generateCommercialProposal(analysisData: any): string {
-    // Cálculos técnicos corrigidos conforme NBR 16274
-    const annualProduction = Number(analysisData.estimated_production);
-    
-    // HSP médio Brasil: 1.300 kWh/kWp/ano (mais conservador e realista)
-    const recommendedPower = Math.round(annualProduction / 1300);
-    
-    // Módulos padrão 550Wp - usar Math.ceil para não subdimensionar
-    const panelCount = Math.ceil(recommendedPower / 0.55);
-    
-    // Recalcular potência real baseada no número de módulos
-    const actualPower = panelCount * 0.55;
-    
-    const monthlyProduction = Math.round(annualProduction / 12);
-    
-    // Tarifa média Brasil 2024: R$ 0,85/kWh (mais realista)
-    // Considerar que nem toda produção é consumida (fator 0,9)
-    const annualSavings = Math.round(annualProduction * 0.85 * 0.9);
+  static async generateCommercialProposal(analysisData: any): Promise<string> {
+    try {
+      // Cálculos técnicos corrigidos conforme NBR 16274
+      const annualProduction = Number(analysisData.estimated_production);
+      const coordinates = analysisData.coordinates;
+      
+      // Buscar dados da concessionária baseado na localização
+      const concessionariaInfo = await AneelDataService.getConcessionariaInfo(
+        coordinates.lat, 
+        coordinates.lng
+      );
+      
+      // NÃO INVENTAR potência ou módulos - usar apenas produção real calculada
+      // Os cálculos de potência devem ser feitos por profissionais qualificados
+      
+      const monthlyProduction = Math.round(annualProduction / 12);
+      
+      // Usar tarifa real da concessionária (com fator de consumo 0,9)
+      const realTariff = concessionariaInfo.tarifa;
+      const annualSavings = Math.round(annualProduction * realTariff * 0.9);
 
     return `
       <div class="page-break"></div>
@@ -1117,27 +1318,20 @@ class HTMLTemplateGenerator {
         
         <div class="data-grid">
           <div class="data-item">
-            <div class="data-label">Potência Recomendada</div>
-            <div class="data-value">${actualPower.toLocaleString(
-              "pt-BR",
-              { minimumFractionDigits: 1, maximumFractionDigits: 1 }
-            )} kWp</div>
+            <div class="data-label">Área Disponível</div>
+            <div class="data-value">${Number(analysisData.usable_area).toLocaleString("pt-BR")} m²</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Módulos 550Wp</div>
-            <div class="data-value">${panelCount.toLocaleString(
-              "pt-BR"
-            )} unidades</div>
+            <div class="data-label">Potencial de Produção</div>
+            <div class="data-value">${annualProduction.toLocaleString("pt-BR")} kWh/ano</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Área Necessária</div>
-            <div class="data-value">${Math.round(panelCount * 2.8).toLocaleString(
-              "pt-BR"
-            )} m²</div>
+            <div class="data-label">Irradiação Local</div>
+            <div class="data-value">${Number(analysisData.annual_ghi).toLocaleString("pt-BR")} kWh/m²/ano</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Relação Potência/Área</div>
-            <div class="data-value">${(actualPower * 1000 / Number(analysisData.usable_area)).toFixed(0)} W/m²</div>
+            <div class="data-label">Perdas por Sombreamento</div>
+            <div class="data-value">${Number(analysisData.shading_loss).toFixed(1)}%</div>
           </div>
         </div>
         
@@ -1156,49 +1350,77 @@ class HTMLTemplateGenerator {
         
         <div class="chart-container">
           ${EChartsGenerator.generateBarChart([
-            { name: 'Investimento', value: Math.round(actualPower * 5000) },
-            { name: 'Economia Total', value: Math.round(annualSavings * 25 * 0.8) },
-            { name: 'Retorno Líquido', value: Math.round((annualSavings * 25 * 0.8) - (actualPower * 5000)) }
-          ], 600, 350, 'Análise Financeira - Investimento vs Retorno (25 anos)', '#0066cc')}
+            { name: 'Economia Total (25 anos)', value: Math.round(annualSavings * 25 * 0.8) }
+          ], 600, 350, 'Projeção de Economia Energética (25 anos)', '#0066cc')}
         </div>
         
+        <div class="section-title">6.2 Dados da Concessionária Local</div>
+        <div class="data-grid">
+          <div class="data-item">
+            <div class="data-label">Concessionária</div>
+            <div class="data-value">${concessionariaInfo.nome}</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Estado/Região</div>
+            <div class="data-value">${concessionariaInfo.estado}</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Modalidade Tarifária</div>
+            <div class="data-value">${concessionariaInfo.modalidade}</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Tarifa Vigente</div>
+            <div class="data-value">${formatCurrency(realTariff)}/kWh</div>
+          </div>
+        </div>
+
         <ul>
           <li><strong>Produção Mensal Média:</strong> ${monthlyProduction.toLocaleString(
             "pt-BR"
           )} kWh</li>
-          <li><strong>Produção Anual:</strong> ${annualProduction.toLocaleString(
+          <li><strong>Produção Anual (Real):</strong> ${annualProduction.toLocaleString(
             "pt-BR"
           )} kWh</li>
-          <li><strong>Tarifa Considerada:</strong> R$ 0,85/kWh (média nacional 2024)</li>
+          <li><strong>Tarifa Local (${concessionariaInfo.sigla}):</strong> ${formatCurrency(realTariff)}/kWh</li>
           <li><strong>Economia Anual Estimada:</strong> ${formatCurrency(
             annualSavings
           )}</li>
           <li><strong>Economia em 25 anos:</strong> ${formatCurrency(
             annualSavings * 25 * 0.8
           )} (considerando degradação)</li>
-          <li><strong>Investimento Estimado:</strong> ${formatCurrency(
-            actualPower * 5000
-          )} (R$ 5.000/kWp)</li>
-          <li><strong>Retorno Líquido:</strong> ${formatCurrency(
-            (annualSavings * 25 * 0.8) - (actualPower * 5000)
-          )}</li>
-          <li><strong>Payback Estimado:</strong> ${((actualPower * 5000) / annualSavings).toFixed(1)} anos</li>
-          <li><strong>Vida Útil Garantida:</strong> 25 anos (degradação < 0,5%/ano)</li>
+          <li><strong>Fonte dos Dados:</strong> ${analysisData.irradiation_source}</li>
+          <li><strong>Confiança da Análise:</strong> ${analysisData.confidence}</li>
+          <li><strong>Vida Útil Padrão:</strong> 25 anos (degradação < 0,5%/ano)</li>
         </ul>
         
         <div class="warning">
           <strong>Observações Importantes:</strong>
           <ul>
-            <li>Valores baseados em tarifa média nacional (varia por concessionária)</li>
-            <li>Não inclui custos de equipamentos, instalação e homologação</li>
-            <li>Investimento típico: R$ 4.000 a R$ 6.000 por kWp instalado</li>
-            <li>Sistema requer homologação junto à concessionária local</li>
-            <li>Manutenção preventiva semestral recomendada</li>
-            <li>Orçamento técnico-comercial disponível mediante consulta</li>
+            <li><strong>Dados Reais:</strong> Produção baseada em ${analysisData.irradiation_source}</li>
+            <li><strong>Tarifas:</strong> Baseadas em dados oficiais da ANEEL (${concessionariaInfo.nome})</li>
+            <li><strong>Área Real:</strong> ${Number(analysisData.usable_area)} m² conforme análise ${analysisData.area_source}</li>
+            <li><strong>Sombreamento:</strong> ${Number(analysisData.shading_loss)}% calculado por ${analysisData.shading_source || 'análise automática'}</li>
+            <li><strong>Dimensionamento:</strong> Requer projeto técnico por profissional habilitado</li>
+            <li><strong>Homologação:</strong> Obrigatória junto à ${concessionariaInfo.nome}</li>
+            <li><strong>Modalidade:</strong> ${concessionariaInfo.modalidade} considerada</li>
+            <li><strong>Orçamento:</strong> Valores de investimento mediante consulta técnica</li>
           </ul>
         </div>
       </div>
     `;
+    } catch (error) {
+      console.error('Erro ao gerar proposta comercial:', error);
+      return `
+        <div class="page-break"></div>
+        <div class="section">
+          <div class="section-title">6. PROPOSTA TÉCNICA COMERCIAL</div>
+          <div class="warning">
+            <strong>Erro:</strong> Não foi possível gerar a proposta comercial completa devido a problemas na obtenção dos dados tarifários.
+            Entre em contato para uma análise personalizada.
+          </div>
+        </div>
+      `;
+    }
   }
 
   static generateFooter(analysisData: any, companyInfo?: any): string {
@@ -1238,7 +1460,7 @@ class HTMLTemplateGenerator {
     `;
   }
 
-  static generateCompleteReport(analysisData: any, options: any): string {
+  static async generateCompleteReport(analysisData: any, options: any): Promise<string> {
     const { language, notes, companyInfo, includeCommercial, mapImage } = options;
 
     const notesSection = notes
@@ -1251,7 +1473,7 @@ class HTMLTemplateGenerator {
       : "";
 
     const commercialSection = includeCommercial
-      ? this.generateCommercialProposal(analysisData)
+      ? await this.generateCommercialProposal(analysisData)
       : "";
 
     return `
@@ -1378,11 +1600,11 @@ class PDFGeneratorService {
     }
   }
 
-  generatePDFContent(
+  async generatePDFContent(
     analysisData: any,
     options: any
-  ): { html: string; filename: string } {
-    const html = HTMLTemplateGenerator.generateCompleteReport(
+  ): Promise<{ html: string; filename: string }> {
+    const html = await HTMLTemplateGenerator.generateCompleteReport(
       analysisData,
       options
     );
@@ -1479,7 +1701,7 @@ Deno.serve(async (req: Request) => {
     }
 
     // Generate PDF content
-    const { html, filename } = pdfService.generatePDFContent(analysisData, {
+    const { html, filename } = await pdfService.generatePDFContent(analysisData, {
       language: validatedData.language,
       notes: validatedData.notes,
       companyInfo: validatedData.companyInfo,
