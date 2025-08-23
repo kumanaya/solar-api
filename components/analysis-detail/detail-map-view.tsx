@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useAnalysisDetail } from "./analysis-detail-context";
+import { MapLibreMapRef } from "../analysis/maplibre-map";
 
 // MapLibre style configuration
 const getMapStyle = (): maplibregl.StyleSpecification => ({
@@ -27,11 +28,67 @@ const getMapStyle = (): maplibregl.StyleSpecification => ({
   ]
 });
 
-export function DetailMapView() {
+export const DetailMapView = forwardRef<MapLibreMapRef>((_, ref) => {
   const { analysis, isLoading } = useAnalysisDetail();
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
+
+  // Implementar as funções necessárias para MapLibreMapRef
+  useImperativeHandle(ref, () => ({
+    undoLastPoint: () => {
+      console.warn('undoLastPoint não implementado no DetailMapView');
+    },
+    clearDrawing: () => {
+      console.warn('clearDrawing não implementado no DetailMapView');
+    },
+    getDrawingCoordinates: () => {
+      console.warn('getDrawingCoordinates não implementado no DetailMapView');
+      return [];
+    },
+    reopenPolygon: () => {
+      console.warn('reopenPolygon não implementado no DetailMapView');
+    },
+    clearPin: () => {
+      console.warn('clearPin não implementado no DetailMapView');
+    },
+    captureMapImage: async (): Promise<string | null> => {
+      if (!map.current) return null;
+
+      try {
+        // Forçar renderização e aguardar um frame
+        map.current.triggerRepaint();
+        await new Promise(requestAnimationFrame);
+        
+        // Pegar o canvas do mapa
+        const mapCanvas = map.current.getCanvas();
+        
+        // Criar um novo canvas com fundo branco
+        const canvas = document.createElement('canvas');
+        canvas.width = mapCanvas.width;
+        canvas.height = mapCanvas.height;
+        
+        const ctx = canvas.getContext('2d', {
+          alpha: false // Desabilitar alpha para garantir fundo sólido
+        });
+        
+        if (!ctx) return null;
+
+        // Preencher com fundo branco
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Desenhar o mapa sobre o fundo branco
+        ctx.drawImage(mapCanvas, 0, 0);
+        
+        // Converter para JPEG (sem transparência) com qualidade máxima
+        return canvas.toDataURL('image/jpeg', 1.0);
+      } catch (error) {
+        console.error('Erro ao capturar mapa:', error);
+        return null;
+      }
+    }
+  }), []);
 
   useEffect(() => {
     if (!analysis || !mapContainer.current || map.current) return;
@@ -86,6 +143,8 @@ export function DetailMapView() {
       style: getMapStyle(),
       center: centerCoordinates,
       zoom: initialZoom,
+      preserveDrawingBuffer: true, // Necessário para captura de imagem
+      antialias: true,
       attributionControl: false
     });
 
@@ -321,4 +380,6 @@ export function DetailMapView() {
       </div>
     </div>
   );
-}
+});
+
+DetailMapView.displayName = 'DetailMapView';

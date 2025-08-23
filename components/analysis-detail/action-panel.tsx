@@ -6,12 +6,14 @@ import { RefreshCw, Copy, History, Loader2, Image, FileText } from "lucide-react
 import { useAnalysisDetail } from "./analysis-detail-context";
 import { PDFModal } from "../analysis/pdf-modal";
 import { toast } from "sonner";
+import { MapLibreMapRef } from "../analysis/maplibre-map";
 
 interface ActionPanelProps {
   onToggleHistory: () => void;
+  mapRef?: React.RefObject<MapLibreMapRef>;
 }
 
-export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
+export function ActionPanel({ onToggleHistory, mapRef }: ActionPanelProps) {
   const { 
     analysis, 
     setIsReprocessModalOpen, 
@@ -146,6 +148,7 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
       <PDFModal 
         isOpen={isPDFModalOpen} 
         onClose={() => setIsPDFModalOpen(false)}
+        mapRef={mapRef}
         analysisData={{
           id: analysis.id,
           address: analysis.address,

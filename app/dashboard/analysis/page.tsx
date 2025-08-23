@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { MapPanel } from "@/components/analysis/map-panel";
 import { ResultsPanel } from "@/components/analysis/results-panel";
 import { AnalysisProvider } from "@/components/analysis/analysis-context";
@@ -8,11 +8,15 @@ import { ChevronLeft, ChevronRight, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useDuplicateInitialization } from "@/lib/hooks/use-duplicate-initialization";
+import { MapLibreMapRef } from "@/components/analysis/maplibre-map";
 
 export default function AnalysisPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  
+  // Shared map reference
+  const mapRef = useRef<MapLibreMapRef>(null);
 
   // Initialize duplicate data if available
   useDuplicateInitialization();
@@ -86,7 +90,7 @@ export default function AnalysisPage() {
               : 'flex-1 max-w-[calc(100%-320px)]'
           }`}
         >
-          <MapPanel />
+          <MapPanel mapRef={mapRef} />
           
           {/* Botão de toggle no mapa - alinhado com o input */}
           <Button
@@ -112,7 +116,7 @@ export default function AnalysisPage() {
               : 'w-80 opacity-100 overflow-y-auto'
           }`}
         >
-          {!isSidebarCollapsed && <ResultsPanel />}
+          {!isSidebarCollapsed && <ResultsPanel mapRef={mapRef} />}
         </div>
       </div>
 
@@ -120,12 +124,12 @@ export default function AnalysisPage() {
       <div className="md:hidden flex flex-col h-screen overflow-hidden">
         {/* Mapa - metade superior */}
         <div className="flex-1 relative">
-          <MapPanel />
+          <MapPanel mapRef={mapRef} />
         </div>
         
         {/* Painel de resultados - metade inferior */}
         <div className="flex-1 border-t bg-background overflow-y-auto">
-          <ResultsPanel />
+          <ResultsPanel mapRef={mapRef} />
         </div>
       </div>
     </AnalysisProvider>

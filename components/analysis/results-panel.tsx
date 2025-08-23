@@ -6,8 +6,13 @@ import { ActionButtons } from "./action-buttons";
 import { useAnalysis } from "./analysis-context";
 import { AlertCircle } from "lucide-react";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
+import { MapLibreMapRef } from "./maplibre-map";
 
-export function ResultsPanel() {
+interface ResultsPanelProps {
+  mapRef: React.RefObject<MapLibreMapRef>;
+}
+
+export function ResultsPanel({ mapRef }: ResultsPanelProps) {
   const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading, setHasAnalysisResults } = useAnalysis();
   
   const { isFootprintError } = useErrorHandler();
@@ -124,7 +129,7 @@ export function ResultsPanel() {
       {/* Ações */}
       {data.coordinates && (
         <div className="border-t p-4">
-          <ActionButtons />
+          <ActionButtons mapRef={mapRef} />
         </div>
       )}
     </div>

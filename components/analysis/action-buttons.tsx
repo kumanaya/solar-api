@@ -10,8 +10,13 @@ import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
 import { getFootprints, transformFootprintData } from "@/lib/footprints-api";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { createClient } from "@/lib/supabase/client";
+import { MapLibreMapRef } from "./maplibre-map";
 
-export function ActionButtons() {
+interface ActionButtonsProps {
+  mapRef: React.RefObject<MapLibreMapRef>;
+}
+
+export function ActionButtons({ mapRef }: ActionButtonsProps) {
   const router = useRouter();
   const { 
     data, 
@@ -500,6 +505,7 @@ export function ActionButtons() {
         isOpen={isPDFModalOpen} 
         onClose={() => setIsPDFModalOpen(false)}
         analysisData={data}
+        mapRef={mapRef}
       />
     </>
   );

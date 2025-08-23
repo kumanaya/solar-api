@@ -9,9 +9,21 @@ import { MapPin } from "lucide-react";
 import { MapLibreMapRef } from "./maplibre-map";
 import { useAnalysis } from "./analysis-context";
 
-export function MapPanel() {
+interface MapPanelProps {
+  mapRef: React.RefObject<MapLibreMapRef>;
+}
+
+export function MapPanel({ mapRef }: MapPanelProps) {
   const { data: _data, hasAnalysisResults: _hasAnalysisResults } = useAnalysis();
-  const mapRef = useRef<MapLibreMapRef>(null);
+  
+  // Debug da referência do mapa
+  useEffect(() => {
+    console.log('🗺️ MapPanel - mapRef status:', {
+      hasRef: !!mapRef,
+      hasCurrent: !!mapRef.current,
+      refType: typeof mapRef.current
+    });
+  }, [mapRef]);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
   const [isPinMode, setIsPinMode] = useState(false);
   const [mapLayer, setMapLayer] = useState<"satellite" | "streets">("satellite");

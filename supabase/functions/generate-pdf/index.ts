@@ -37,6 +37,10 @@ const PDFRequestSchema = z.object({
     .max(1000, "Notas não podem exceder 1000 caracteres")
     .regex(/^[^<>]*$/, "Notas não podem conter tags HTML")
     .optional(),
+  mapImage: z
+    .string()
+    .regex(/^data:image\/(png|jpeg|jpg);base64,/, "Imagem deve ser base64 válida")
+    .min(1, "Imagem do mapa é obrigatória"),
   companyInfo: z
     .object({
       name: z.string().max(100, "Nome da empresa muito longo").optional(),
@@ -64,6 +68,7 @@ const AnalysisDataSchema = z.object({
   annual_ghi: z.number().positive("GHI deve ser positivo"),
   estimated_production: z.number().positive("Produção deve ser positiva"),
   shading_loss: z.number().min(0).max(100),
+  usage_factor: z.number().min(0).max(1),
   confidence: z.enum(["Alta", "Média", "Baixa"]),
   verdict: z.enum(["Apto", "Parcial", "Não apto"]),
   irradiation_source: z.string(),
@@ -73,6 +78,21 @@ const AnalysisDataSchema = z.object({
     fallback: z.string().optional(),
   }),
   reasons: z.array(z.string()).optional(),
+  // Adicionar campos para imagem satélite
+  footprints: z.array(z.object({
+    id: z.string(),
+    coordinates: z.array(z.tuple([z.number(), z.number()])),
+    area: z.number(),
+    isActive: z.boolean(),
+    source: z.string().optional(),
+  })).optional(),
+  imagery_metadata: z.object({
+    source: z.string().optional(),
+    captureDate: z.string().optional(),
+    resolution: z.string().optional(),
+    sourceInfo: z.string().optional(),
+    accuracy: z.string().optional(),
+  }).optional(),
 });
 
 /* ========= UTILITÁRIOS DE SEGURANÇA ========= */
@@ -90,6 +110,65 @@ function formatCurrency(value: number): string {
     style: "currency",
     currency: "BRL",
   }).format(value);
+}
+
+/* ========= FUNÇÕES PARA MAPA ESTÁTICO ========= */
+function calculateBounds(coordinates: [number, number][]): string {
+  if (coordinates.length === 0) return "";
+  
+  let minLng = coordinates[0][0];
+  let maxLng = coordinates[0][0];
+  let minLat = coordinates[0][1];
+  let maxLat = coordinates[0][1];
+  
+  coordinates.forEach(([lng, lat]) => {
+    minLng = Math.min(minLng, lng);
+    maxLng = Math.max(maxLng, lng);
+    minLat = Math.min(minLat, lat);
+    maxLat = Math.max(maxLat, lat);
+  });
+  
+  // Adicionar margem de 10%
+  const lngMargin = (maxLng - minLng) * 0.1;
+  const latMargin = (maxLat - minLat) * 0.1;
+  
+  return `${minLng - lngMargin},${minLat - latMargin},${maxLng + lngMargin},${maxLat + latMargin}`;
+}
+
+function generateStaticMapUrl(
+  lat: number, 
+  lng: number, 
+  coordinates?: [number, number][], 
+  width = 800, 
+  height = 600
+): string {
+  try {
+    let bounds = "";
+    
+    if (coordinates && coordinates.length > 0) {
+      bounds = calculateBounds(coordinates);
+    } else {
+      // Usar coordenadas centrais com zoom padrão
+      const margin = 0.001; // ~100m de margem
+      bounds = `${lng - margin},${lat - margin},${lng + margin},${lat + margin}`;
+    }
+    
+    // Usar Esri ArcGIS Static Map Service (gratuito)
+    const baseUrl = "https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export";
+    const params = new URLSearchParams({
+      bbox: bounds,
+      bboxSR: "4326",
+      size: `${width},${height}`,
+      format: "png",
+      f: "image"
+    });
+    
+    return `${baseUrl}?${params.toString()}`;
+  } catch (error) {
+    console.error("Erro ao gerar URL do mapa estático:", error);
+    // Retornar URL de fallback simples
+    return `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?bbox=${lng-0.001},${lat-0.001},${lng+0.001},${lat+0.001}&bboxSR=4326&size=800,600&format=png&f=image`;
+  }
 }
 
 /* ========= TEMPLATES HTML MODULARIZADOS ========= */
@@ -195,6 +274,35 @@ class HTMLTemplateGenerator {
       border-radius: 4px; 
       padding: 12px; 
       margin: 10px 0; 
+    }
+    .satellite-image {
+      max-width: 100%;
+      border: 2px solid #0066cc;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      margin: 20px 0;
+    }
+    .coordinates-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 15px 0;
+    }
+    .coordinates-table th,
+    .coordinates-table td {
+      padding: 8px;
+      text-align: left;
+      border: 1px solid #ddd;
+    }
+    .coordinates-table th {
+      background-color: #f8f9fa;
+      font-weight: bold;
+    }
+    .polygon-info {
+      background: #f0f8ff;
+      border: 1px solid #0066cc;
+      border-radius: 4px;
+      padding: 15px;
+      margin: 15px 0;
     }
   `;
 
@@ -346,10 +454,122 @@ class HTMLTemplateGenerator {
     `;
   }
 
+  static generateLocationSection(analysisData: any, mapImage?: string): string {
+    const coordinates = analysisData.coordinates;
+    const footprints = analysisData.footprints || [];
+    const activeFootprint = footprints.find((fp: any) => fp.isActive) || footprints[0];
+    
+    // Usar imagem enviada ou gerar URL de fallback
+    const imageSource = mapImage || generateStaticMapUrl(
+      coordinates.lat, 
+      coordinates.lng, 
+      activeFootprint?.coordinates
+    );
+    
+    // Formatar coordenadas
+    const formatCoordinate = (coord: number, isLat: boolean) => {
+      const direction = isLat 
+        ? (coord >= 0 ? 'N' : 'S')
+        : (coord >= 0 ? 'E' : 'W');
+      return `${Math.abs(coord).toFixed(6)}° ${direction}`;
+    };
+    
+    // Metadados da imagem
+    const imageryMetadata = analysisData.imagery_metadata;
+    const hasImageryData = imageryMetadata && 
+      (imageryMetadata.captureDate || imageryMetadata.resolution || imageryMetadata.sourceInfo);
+    
+    return `
+      <div class="section page-break">
+        <div class="section-title">4. LOCALIZAÇÃO E ÁREA ANALISADA</div>
+        
+        <div style="text-align: center;">
+          <img src="${imageSource}" alt="Vista satélite da área analisada" class="satellite-image" />
+          <p class="subtitle">Imagem de satélite da área analisada${mapImage ? ' (capturada do mapa interativo)' : ''}</p>
+        </div>
+        
+        <div class="data-grid">
+          <div class="data-item">
+            <div class="data-label">Coordenadas Centrais</div>
+            <div class="data-value">
+              ${formatCoordinate(coordinates.lat, true)}<br>
+              ${formatCoordinate(coordinates.lng, false)}
+            </div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Área do Polígono</div>
+            <div class="data-value">${Number(analysisData.usable_area).toLocaleString("pt-BR")} m²</div>
+          </div>
+        </div>
+        
+        ${activeFootprint ? `
+          <div class="polygon-info">
+            <h4>Informações do Polígono Analisado</h4>
+            <table class="coordinates-table">
+              <tr>
+                <th>Propriedade</th>
+                <th>Valor</th>
+              </tr>
+              <tr>
+                <td>Fonte do polígono</td>
+                <td>${activeFootprint.source === 'user-drawn' ? 'Desenhado pelo usuário' : 
+                       activeFootprint.source === 'microsoft-footprint' ? 'Microsoft Building Footprints' :
+                       activeFootprint.source === 'google-footprint' ? 'Google Solar API' : 
+                       'Definido automaticamente'}</td>
+              </tr>
+              <tr>
+                <td>Número de vértices</td>
+                <td>${activeFootprint.coordinates.length}</td>
+              </tr>
+              <tr>
+                <td>Área calculada</td>
+                <td>${activeFootprint.area.toLocaleString("pt-BR")} m²</td>
+              </tr>
+              <tr>
+                <td>Fator de uso aplicado</td>
+                <td>${(analysisData.usage_factor * 100).toFixed(0)}%</td>
+              </tr>
+            </table>
+          </div>
+        ` : ''}
+        
+        ${hasImageryData ? `
+          <div class="section-title">4.1 Metadados da Imagem de Satélite</div>
+          <div class="data-grid">
+            ${imageryMetadata.captureDate ? `
+              <div class="data-item">
+                <div class="data-label">Data da Captura</div>
+                <div class="data-value">${imageryMetadata.captureDate}</div>
+              </div>
+            ` : ''}
+            ${imageryMetadata.resolution ? `
+              <div class="data-item">
+                <div class="data-label">Resolução</div>
+                <div class="data-value">${imageryMetadata.resolution}</div>
+              </div>
+            ` : ''}
+            ${imageryMetadata.sourceInfo ? `
+              <div class="data-item">
+                <div class="data-label">Provedor</div>
+                <div class="data-value">${sanitizeHtml(imageryMetadata.sourceInfo)}</div>
+              </div>
+            ` : ''}
+            ${imageryMetadata.accuracy ? `
+              <div class="data-item">
+                <div class="data-label">Precisão</div>
+                <div class="data-value">${imageryMetadata.accuracy}</div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
+
   static generateDataSources(analysisData: any): string {
     return `
       <div class="section">
-        <div class="section-title">4. METODOLOGIA E FONTES DE DADOS</div>
+        <div class="section-title">5. METODOLOGIA E FONTES DE DADOS</div>
         <p><strong>Fonte de Irradiação Solar:</strong> ${sanitizeHtml(
           analysisData.irradiation_source
         )}</p>
@@ -398,7 +618,7 @@ class HTMLTemplateGenerator {
     return `
       <div class="page-break"></div>
       <div class="section">
-        <div class="section-title">5. PROPOSTA TÉCNICA COMERCIAL</div>
+        <div class="section-title">6. PROPOSTA TÉCNICA COMERCIAL</div>
         
         <div class="data-grid">
           <div class="data-item">
@@ -426,7 +646,7 @@ class HTMLTemplateGenerator {
           </div>
         </div>
         
-        <div class="section-title">5.1 Estimativas Econômicas</div>
+        <div class="section-title">6.1 Estimativas Econômicas</div>
         <ul>
           <li><strong>Produção Mensal Média:</strong> ${monthlyProduction.toLocaleString(
             "pt-BR"
@@ -498,12 +718,12 @@ class HTMLTemplateGenerator {
   }
 
   static generateCompleteReport(analysisData: any, options: any): string {
-    const { language, notes, companyInfo, includeCommercial } = options;
+    const { language, notes, companyInfo, includeCommercial, mapImage } = options;
 
     const notesSection = notes
       ? `
       <div class="section">
-        <div class="section-title">6. OBSERVAÇÕES ADICIONAIS</div>
+        <div class="section-title">${includeCommercial ? '7' : '6'}. OBSERVAÇÕES ADICIONAIS</div>
         <p>${sanitizeHtml(notes)}</p>
       </div>
     `
@@ -527,6 +747,7 @@ class HTMLTemplateGenerator {
         ${this.generateExecutiveSummary(analysisData)}
         ${this.generateTechnicalData(analysisData)}
         ${this.generateTechnicalSpecs(analysisData)}
+        ${this.generateLocationSection(analysisData, mapImage)}
         ${this.generateDataSources(analysisData)}
         ${commercialSection}
         ${notesSection}
@@ -566,7 +787,7 @@ class PDFGeneratorService {
       }
 
       return { user };
-    } catch (error) {
+    } catch {
       return { user: null, error: "Erro na validação do usuário" };
     }
   }
@@ -578,7 +799,11 @@ class PDFGeneratorService {
     try {
       const { data, error } = await this.supabase
         .from("analyses")
-        .select("*")
+        .select(`
+          *,
+          footprints,
+          imagery_metadata
+        `)
         .eq("id", analysisId)
         .eq("user_id", userId)
         .maybeSingle();
@@ -592,12 +817,36 @@ class PDFGeneratorService {
         return { error: "Análise não encontrada ou sem permissão de acesso" };
       }
 
+      // Parse footprints JSON se existir
+      if (data.footprints && typeof data.footprints === 'string') {
+        try {
+          data.footprints = JSON.parse(data.footprints);
+        } catch (parseError) {
+          console.warn("Failed to parse footprints JSON:", parseError);
+          data.footprints = null;
+        }
+      }
+
+      // Parse imagery_metadata JSON se existir
+      if (data.imagery_metadata && typeof data.imagery_metadata === 'string') {
+        try {
+          data.imagery_metadata = JSON.parse(data.imagery_metadata);
+        } catch (parseError) {
+          console.warn("Failed to parse imagery_metadata JSON:", parseError);
+          data.imagery_metadata = null;
+        }
+      }
+
       // Validar integridade dos dados da análise
       try {
         const validatedData = AnalysisDataSchema.parse(data);
         return { data: validatedData };
       } catch (validationError) {
         console.error("Invalid analysis data:", validationError);
+        // Log detalhes do erro de validação para debug
+        if (validationError instanceof Error) {
+          console.error("Validation error details:", validationError.message);
+        }
         return { error: "Dados da análise estão corrompidos ou incompletos" };
       }
     } catch (error) {
@@ -712,6 +961,7 @@ Deno.serve(async (req: Request) => {
       notes: validatedData.notes,
       companyInfo: validatedData.companyInfo,
       includeCommercial: validatedData.includeCommercial,
+      mapImage: validatedData.mapImage,
     });
 
     return new Response(

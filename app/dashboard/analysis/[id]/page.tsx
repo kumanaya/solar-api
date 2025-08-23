@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { AnalysisDetailProvider } from "@/components/analysis-detail/analysis-detail-context";
 import { AnalysisHeader } from "@/components/analysis-detail/analysis-header";
@@ -9,12 +9,16 @@ import { TechnicalPanel } from "@/components/analysis-detail/technical-panel";
 import { ActionPanel } from "@/components/analysis-detail/action-panel";
 import { HistoryTimeline } from "@/components/analysis-detail/history-timeline";
 import { ReprocessModal } from "@/components/analysis-detail/reprocess-modal";
+import { MapLibreMapRef } from "@/components/analysis/maplibre-map";
 
 export default function AnalysisDetailPage() {
   const params = useParams();
   const analysisId = params.id as string;
   const [isLoading, setIsLoading] = useState(true);
   const [showHistory, setShowHistory] = useState(false);
+  
+  // Shared map reference for PDF generation
+  const mapRef = useRef<MapLibreMapRef>(null);
 
   useEffect(() => {
     // Simular carregamento dos dados da análise
@@ -46,7 +50,7 @@ export default function AnalysisDetailPage() {
           <div className="flex-1 flex overflow-hidden">
             {/* Mapa (65%) */}
             <div className="flex-1 w-[65%] relative">
-              <DetailMapView />
+              <DetailMapView ref={mapRef} />
             </div>
             
             {/* Painel técnico (35%) */}
@@ -56,7 +60,7 @@ export default function AnalysisDetailPage() {
           </div>
           
           {/* Actions fixas na parte inferior */}
-          <ActionPanel onToggleHistory={() => setShowHistory(!showHistory)} />
+          <ActionPanel onToggleHistory={() => setShowHistory(!showHistory)} mapRef={mapRef} />
         </div>
 
         {/* Timeline lateral (quando ativa) */}
@@ -83,7 +87,7 @@ export default function AnalysisDetailPage() {
         </div>
         
         {/* Actions fixas na parte inferior */}
-        <ActionPanel onToggleHistory={() => setShowHistory(!showHistory)} />
+        <ActionPanel onToggleHistory={() => setShowHistory(!showHistory)} mapRef={mapRef} />
 
         {/* Timeline em modal para mobile */}
         {showHistory && (

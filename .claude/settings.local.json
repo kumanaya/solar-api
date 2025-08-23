@@ -10,6 +10,9 @@
       "Bash(rm:*)",
       "mcp__supabase__execute_sql",
       "Bash(npm run dev:*)"
+    ],
+    "additionalDirectories": [
+      "C:\\c\\Users\\danie\\Desktop\\www\\kumanaya"
     ]
   },
   "enableAllProjectMcpServers": true,

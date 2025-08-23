@@ -24,11 +24,13 @@ import { FileText, Download, ExternalLink, CheckCircle, AlertCircle } from "luci
 import { toast } from "sonner";
 import { Analysis } from "@/lib/types/analysis-schema";
 import { createClient } from "@/lib/supabase/client";
+import { MapLibreMapRef } from "./maplibre-map";
 
 interface PDFModalProps {
   isOpen: boolean;
   onClose: () => void;
   analysisData?: Analysis;
+  mapRef?: React.RefObject<MapLibreMapRef>;
 }
 
 type Language = "pt-BR" | "en" | "es";
@@ -48,7 +50,7 @@ const stepLabels: Record<GenerationStep, string> = {
   "error": "Erro na geração"
 };
 
-export function PDFModal({ isOpen, onClose, analysisData }: PDFModalProps) {
+export function PDFModal({ isOpen, onClose, analysisData, mapRef }: PDFModalProps) {
   const [includeProposal, setIncludeProposal] = useState(false);
   const [language, setLanguage] = useState<Language>("pt-BR");
   const [observations, setObservations] = useState("");
@@ -109,6 +111,10 @@ export function PDFModal({ isOpen, onClose, analysisData }: PDFModalProps) {
     setHasError(false);
     
     try {
+      // Capturar imagem do mapa
+      const mapImage = mapRef?.current ? await mapRef.current.captureMapImage() : null;
+      setProgress(10);
+
       // Get current session token
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
@@ -122,6 +128,7 @@ export function PDFModal({ isOpen, onClose, analysisData }: PDFModalProps) {
       
       // Chamar edge function do Supabase diretamente
       console.log('Calling PDF generation with analysis ID:', analysisData.id);
+      console.log('Map image included:', mapImage ? 'yes' : 'no');
       
       const pdfPromise = supabase.functions.invoke('generate-pdf', {
         body: {
@@ -129,6 +136,7 @@ export function PDFModal({ isOpen, onClose, analysisData }: PDFModalProps) {
           includeCommercial: includeProposal,
           language: language,
           notes: observations.trim() || undefined,
+          mapImage: mapImage, // Incluir imagem do mapa
           companyInfo: {
             name: "Lumionfy - Análise Solar",
             address: undefined,
