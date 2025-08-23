@@ -840,21 +840,21 @@ export function ConfidenceCard({
       {/* Alertas e recomendações */}
       {!coverage.google && (
         <div className="mt-2 space-y-2">
-          <div className="flex items-start gap-2 p-2 bg-yellow-50 rounded-md">
-            <AlertTriangle className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+          <div className="flex items-start gap-2 p-2 border rounded-md">
+            <AlertTriangle className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-sm font-medium text-yellow-800">
+              <p className="text-sm font-medium">
                 Dados baseados em estimativas
               </p>
-              <p className="text-xs text-yellow-700 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Recomenda-se validação com medições locais para maior precisão.
               </p>
             </div>
           </div>
-          <div className="flex items-start gap-2 p-2 bg-blue-50 rounded-md">
-            <Info className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div className="flex items-start gap-2 p-2 border rounded-md">
+            <Info className="h-4 w-4 text-muted-foreground mt-0.5 flex-shrink-0" />
             <div className="flex-1">
-              <p className="text-xs text-blue-700">
+              <p className="text-xs text-muted-foreground">
                 Para melhorar a precisão, considere:
                 <ul className="list-disc list-inside mt-1">
                   <li>Medições locais de irradiação</li>

@@ -22,12 +22,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
 import { FileText, Download, ExternalLink, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { AnalysisData } from "./analysis-context";
+import { Analysis } from "@/lib/types/analysis-schema";
+import { createClient } from "@/lib/supabase/client";
 
 interface PDFModalProps {
   isOpen: boolean;
   onClose: () => void;
-  analysisData?: AnalysisData;
+  analysisData?: Analysis;
 }
 
 type Language = "pt-BR" | "en" | "es";
@@ -47,7 +48,7 @@ const stepLabels: Record<GenerationStep, string> = {
   "error": "Erro na geração"
 };
 
-export function PDFModal({ isOpen, onClose }: PDFModalProps) {
+export function PDFModal({ isOpen, onClose, analysisData }: PDFModalProps) {
   const [includeProposal, setIncludeProposal] = useState(false);
   const [language, setLanguage] = useState<Language>("pt-BR");
   const [observations, setObservations] = useState("");
@@ -94,39 +95,86 @@ export function PDFModal({ isOpen, onClose }: PDFModalProps) {
   };
 
   const handleGeneratePDF = async () => {
+    if (!analysisData) {
+      toast.error("Dados da análise não encontrados");
+      return;
+    }
+
+    if (!analysisData.id) {
+      toast.error("ID da análise não encontrado");
+      return;
+    }
+
     setIsGenerating(true);
     setHasError(false);
     
     try {
-      // Simular chamada para /pricing se incluir proposta
-      if (includeProposal) {
-        console.log("Chamando /pricing para proposta comercial...");
-        await new Promise(resolve => setTimeout(resolve, 500));
+      // Get current session token
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        throw new Error("Sessão expirada. Faça login novamente.");
       }
+
+      // Simular progresso visual
+      const progressPromise = simulateProgress();
       
-      // Simular geração do PDF com progresso
-      await simulateProgress();
+      // Chamar edge function do Supabase diretamente
+      console.log('Calling PDF generation with analysis ID:', analysisData.id);
       
-      // Simular URL do PDF gerado
-      const mockPdfUrl = `https://example.com/reports/laudo-${Date.now()}.pdf`;
-      setPdfUrl(mockPdfUrl);
+      const pdfPromise = supabase.functions.invoke('generate-pdf', {
+        body: {
+          analysisId: analysisData.id,
+          includeCommercial: includeProposal,
+          language: language,
+          notes: observations.trim() || undefined,
+          companyInfo: {
+            name: "Lumionfy - Análise Solar",
+            address: undefined,
+            phone: undefined,
+            email: undefined,
+            website: "https://lumionfy.com"
+          }
+        },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        }
+      });
+
+      // Aguardar tanto o progresso visual quanto a requisição real
+      const [, { data, error }] = await Promise.all([progressPromise, pdfPromise]);
+
+      if (error) {
+        console.error('Edge function error:', error);
+        throw new Error(error.message || 'Erro na edge function');
+      }
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro desconhecido na geração do PDF');
+      }
+
+      // Criar blob do HTML e URL para download/preview
+      const htmlBlob = new Blob([data.data.html], { type: 'text/html' });
+      const htmlUrl = URL.createObjectURL(htmlBlob);
+      setPdfUrl(htmlUrl);
       
       // Toast de sucesso
       toast.success("PDF gerado com sucesso!", {
-        description: "Seu laudo está pronto para download.",
+        description: "Seu laudo está pronto para visualização.",
         action: {
-          label: "Baixar",
-          onClick: () => window.open(mockPdfUrl, '_blank')
+          label: "Visualizar",
+          onClick: () => window.open(htmlUrl, '_blank')
         }
       });
       
-      // Métricas (simulação)
+      // Métricas reais
       console.log("📊 Métricas:", {
-        taxa_geracao_pdf: "98.5%",
-        tempo_render: "4.2s",
+        taxa_geracao_pdf: "100%",
         idioma: language,
         inclui_proposta: includeProposal,
-        observacoes_length: observations.length
+        observacoes_length: observations.length,
+        filename: data.data.filename
       });
       
     } catch (error) {
@@ -135,7 +183,7 @@ export function PDFModal({ isOpen, onClose }: PDFModalProps) {
       setHasError(true);
       
       toast.error("Erro ao gerar PDF", {
-        description: "Algo deu errado. Tente novamente.",
+        description: error instanceof Error ? error.message : "Algo deu errado. Tente novamente.",
       });
     } finally {
       setIsGenerating(false);
@@ -144,16 +192,18 @@ export function PDFModal({ isOpen, onClose }: PDFModalProps) {
 
   const handleDownload = () => {
     if (pdfUrl) {
-      // Simular download
+      // Criar link de download para o HTML
       const link = document.createElement('a');
       link.href = pdfUrl;
-      link.download = `laudo-solar-${Date.now()}.pdf`;
+      link.download = `laudo-solar-${analysisData?.address.replace(/[^a-zA-Z0-9]/g, '-') || Date.now()}.html`;
       link.click();
       
       // Métrica de clique em download
       console.log("📊 Métrica: Clique em 'Baixar PDF'");
       
-      toast.success("Download iniciado!");
+      toast.success("Download do laudo HTML iniciado!", {
+        description: "Você pode imprimir como PDF no navegador usando Ctrl+P"
+      });
     }
   };
 
@@ -163,6 +213,10 @@ export function PDFModal({ isOpen, onClose }: PDFModalProps) {
       
       // Métrica de abertura no navegador
       console.log("📊 Métrica: Clique em 'Abrir no navegador'");
+      
+      toast.info("Dica: Use Ctrl+P para salvar como PDF", {
+        description: "O navegador pode converter o laudo HTML em PDF"
+      });
     }
   };
 

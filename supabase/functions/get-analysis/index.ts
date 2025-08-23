@@ -15,11 +15,7 @@ const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
 /* ========= SCHEMAS ========= */
 const ShadingDescriptionEnum = z.enum([
-  "sem_sombra",      // 0-5% - Área totalmente livre
-  "sombra_minima",   // 5-15% - Pequenas obstruções pontuais
-  "sombra_parcial",  // 15-30% - Obstruções em parte do dia
-  "sombra_moderada", // 30-45% - Sombreamento significativo
-  "sombra_severa"    // 45-60% - Sombreamento crítico
+  "sem_sombra", "sombra_minima", "sombra_parcial", "sombra_moderada", "sombra_severa"
 ]);
 
 const AnalysisSchema = z.object({
@@ -126,9 +122,6 @@ Deno.serve(async (req: Request) => {
     const json = await req.json();
     const input = GetAnalysisRequestSchema.parse(json);
 
-    console.log('input', input);
-    console.log('input.id', input.id);
-
     // Get analysis from database with user's JWT token
     const authHeader = req.headers.get("Authorization");
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -146,7 +139,6 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (error) {
-      console.error('Database query error:', error);
       if (error.code === 'PGRST116') {
         return new Response(JSON.stringify({ success: false, error: "Analysis not found" }), {
           status: 404,
@@ -159,29 +151,33 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Transform database result to frontend format
+    // Corrigido: anualIrradiation é número, retrocompatível com annual_ghi (string ou number)
     const transformedAnalysis = {
       id: analysis.id,
       address: analysis.address,
       coordinates: analysis.coordinates,
       coverage: analysis.coverage,
       confidence: analysis.confidence,
-      usableArea: analysis.usable_area,
+      usableArea: Number(analysis.usable_area),
       areaSource: analysis.area_source,
-      usageFactor: analysis.usage_factor,
-      annualGHI: analysis.annual_ghi,
+      usageFactor: Number(analysis.usage_factor),
+      annualIrradiation: Number(
+        analysis.annual_irradiation ??
+        analysis.annual_ghi ??
+        0 // fallback seguro
+      ),
       irradiationSource: analysis.irradiation_source,
-      shadingIndex: analysis.shading_index,
-      shadingLoss: analysis.shading_loss,
+      shadingIndex: Number(analysis.shading_index),
+      shadingLoss: Number(analysis.shading_loss),
       shadingSource: analysis.shading_source,
-      estimatedProduction: analysis.estimated_production,
-      estimatedProductionAC: analysis.estimated_production_ac,
-      estimatedProductionDC: analysis.estimated_production_dc,
-      estimatedProductionYear1: analysis.estimated_production_year1,
-      estimatedProductionYear25: analysis.estimated_production_year25,
-      temperatureLosses: analysis.temperature_losses,
-      degradationFactor: analysis.degradation_factor,
-      effectivePR: analysis.effective_pr,
+      estimatedProduction: Number(analysis.estimated_production),
+      estimatedProductionAC: Number(analysis.estimated_production_ac),
+      estimatedProductionDC: Number(analysis.estimated_production_dc),
+      estimatedProductionYear1: Number(analysis.estimated_production_year1),
+      estimatedProductionYear25: Number(analysis.estimated_production_year25),
+      temperatureLosses: Number(analysis.temperature_losses),
+      degradationFactor: Number(analysis.degradation_factor),
+      effectivePR: Number(analysis.effective_pr),
       verdict: analysis.verdict,
       reasons: analysis.reasons,
       recommendations: analysis.recommendations,

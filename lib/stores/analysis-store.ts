@@ -63,6 +63,7 @@ const defaultData: Analysis = {
   usableArea: 0,
   areaSource: "manual",
   annualIrradiation: 0,
+  annualGHI: 0,
   irradiationSource: "PVGIS",
   shadingIndex: 0,
   shadingLoss: 0,

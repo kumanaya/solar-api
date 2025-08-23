@@ -48,6 +48,7 @@ export const AnalysisSchema = z.object({
   
   // Solar radiation data
   annualIrradiation: z.number(),
+  annualGHI: z.number(),
   irradiationSource: z.string(),
   
   // Shading information

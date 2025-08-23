@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, Copy, History, Loader2, Image } from "lucide-react";
+import { RefreshCw, Copy, History, Loader2, Image, FileText } from "lucide-react";
 import { useAnalysisDetail } from "./analysis-detail-context";
 import { PDFModal } from "../analysis/pdf-modal";
 import { toast } from "sonner";
@@ -58,6 +58,14 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
         <div className="p-4 space-y-4">
           {/* Ações principais */}
           <div className="flex flex-wrap gap-3">
+            {/* Gerar Laudo */}
+            <Button 
+              onClick={handleOpenPDFModal}
+              className="flex-1 min-w-0"
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Gerar Laudo
+            </Button>
 
             {/* Camadas de Dados */}
             <Button 
@@ -139,6 +147,7 @@ export function ActionPanel({ onToggleHistory }: ActionPanelProps) {
         isOpen={isPDFModalOpen} 
         onClose={() => setIsPDFModalOpen(false)}
         analysisData={{
+          id: analysis.id,
           address: analysis.address,
           coordinates: analysis.coordinates,
           coverage: {
