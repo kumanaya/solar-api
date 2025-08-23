@@ -171,6 +171,275 @@ function generateStaticMapUrl(
   }
 }
 
+/* ========= GERADOR DE GRÁFICOS ECHARTS ========= */
+class EChartsGenerator {
+  
+  // Gerar gráfico de pizza usando ECharts
+  static generatePieChart(
+    data: Array<{name: string, value: number}>,
+    width = 600,
+    height = 400,
+    title = ''
+  ): string {
+    const chartId = `pie-chart-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const option = {
+      title: {
+        text: title,
+        left: 'center',
+        textStyle: {
+          fontSize: 16,
+          fontWeight: 'bold',
+          color: '#0066cc'
+        }
+      },
+      tooltip: {
+        trigger: 'item',
+        formatter: '{a} <br/>{b}: {c} ({d}%)'
+      },
+      legend: {
+        orient: 'vertical',
+        left: 'left',
+        textStyle: {
+          fontSize: 12
+        }
+      },
+      series: [
+        {
+          name: 'Distribuição',
+          type: 'pie',
+          radius: '50%',
+          data: data,
+          emphasis: {
+            itemStyle: {
+              shadowBlur: 10,
+              shadowOffsetX: 0,
+              shadowColor: 'rgba(0, 0, 0, 0.5)'
+            }
+          },
+          label: {
+            formatter: '{b}: {d}%'
+          }
+        }
+      ],
+      color: ['#28a745', '#ff6b6b', '#4ecdc4', '#45b7d1', '#f9ca24', '#6c5ce7']
+    };
+    
+    return `
+      <div id="${chartId}" style="width: ${width}px; height: ${height}px; margin: 0 auto;"></div>
+      <script>
+        (function() {
+          const chart = echarts.init(document.getElementById('${chartId}'));
+          const option = ${JSON.stringify(option)};
+          chart.setOption(option);
+          
+          // Responsividade
+          window.addEventListener('resize', function() {
+            chart.resize();
+          });
+        })();
+      </script>
+    `;
+  }
+  
+  // Gerar gráfico de barras usando ECharts
+  static generateBarChart(
+    data: Array<{name: string, value: number}>,
+    width = 600,
+    height = 400,
+    title = '',
+    color = '#0066cc'
+  ): string {
+    const chartId = `bar-chart-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const option = {
+      title: {
+        text: title,
+        left: 'center',
+        textStyle: {
+          fontSize: 16,
+          fontWeight: 'bold',
+          color: '#0066cc'
+        }
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'shadow'
+        },
+        formatter: function(params: any) {
+          return `${params[0].name}: ${params[0].value.toLocaleString('pt-BR')}`;
+        }
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: [
+        {
+          type: 'category',
+          data: data.map(item => item.name),
+          axisTick: {
+            alignWithLabel: true
+          },
+          axisLabel: {
+            fontSize: 11,
+            rotate: data.length > 6 ? 45 : 0
+          }
+        }
+      ],
+      yAxis: [
+        {
+          type: 'value',
+          axisLabel: {
+            formatter: function(value: number) {
+              return value.toLocaleString('pt-BR');
+            }
+          }
+        }
+      ],
+      series: [
+        {
+          name: 'Valores',
+          type: 'bar',
+          barWidth: '60%',
+          data: data.map(item => item.value),
+          itemStyle: {
+            color: color,
+            borderRadius: [4, 4, 0, 0]
+          },
+          label: {
+            show: true,
+            position: 'top',
+            formatter: function(params: any) {
+              return params.value.toLocaleString('pt-BR');
+            },
+            fontSize: 10,
+            color: '#666'
+          }
+        }
+      ]
+    };
+    
+    return `
+      <div id="${chartId}" style="width: ${width}px; height: ${height}px; margin: 0 auto;"></div>
+      <script>
+        (function() {
+          const chart = echarts.init(document.getElementById('${chartId}'));
+          const option = ${JSON.stringify(option)};
+          chart.setOption(option);
+          
+          window.addEventListener('resize', function() {
+            chart.resize();
+          });
+        })();
+      </script>
+    `;
+  }
+  
+  // Gerar gráfico de linha usando ECharts
+  static generateLineChart(
+    data: Array<{name: string, value: number}>,
+    width = 600,
+    height = 400,
+    title = '',
+    color = '#0066cc'
+  ): string {
+    const chartId = `line-chart-${Math.random().toString(36).substr(2, 9)}`;
+    
+    const option = {
+      title: {
+        text: title,
+        left: 'center',
+        textStyle: {
+          fontSize: 16,
+          fontWeight: 'bold',
+          color: '#0066cc'
+        }
+      },
+      tooltip: {
+        trigger: 'axis',
+        formatter: function(params: any) {
+          const value = params[0].value;
+          return `${params[0].name}: ${formatCurrency(value)}`;
+        }
+      },
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      },
+      xAxis: {
+        type: 'category',
+        boundaryGap: false,
+        data: data.map(item => item.name),
+        axisLabel: {
+          fontSize: 11
+        }
+      },
+      yAxis: {
+        type: 'value',
+        axisLabel: {
+          formatter: function(value: number) {
+            return 'R$ ' + (value / 1000).toFixed(0) + 'k';
+          }
+        }
+      },
+      series: [
+        {
+          name: 'Economia Acumulada',
+          type: 'line',
+          stack: 'Total',
+          data: data.map(item => item.value),
+          itemStyle: {
+            color: color
+          },
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: color + '40' },
+                { offset: 1, color: color + '10' }
+              ]
+            }
+          },
+          label: {
+            show: true,
+            position: 'top',
+            formatter: function(params: any) {
+              return formatCurrency(params.value);
+            },
+            fontSize: 9,
+            color: '#666'
+          }
+        }
+      ]
+    };
+    
+    return `
+      <div id="${chartId}" style="width: ${width}px; height: ${height}px; margin: 0 auto;"></div>
+      <script>
+        (function() {
+          const chart = echarts.init(document.getElementById('${chartId}'));
+          const option = ${JSON.stringify(option)};
+          chart.setOption(option);
+          
+          window.addEventListener('resize', function() {
+            chart.resize();
+          });
+        })();
+      </script>
+    `;
+  }
+}
+
 /* ========= TEMPLATES HTML MODULARIZADOS ========= */
 class HTMLTemplateGenerator {
   private static readonly CSS_STYLES = `
@@ -304,6 +573,24 @@ class HTMLTemplateGenerator {
       padding: 15px;
       margin: 15px 0;
     }
+    .chart-container {
+      text-align: center;
+      margin: 20px 0;
+      padding: 15px;
+      background: #fafafa;
+      border-radius: 8px;
+      border: 1px solid #e0e0e0;
+    }
+    .chart-title {
+      font-size: 14px;
+      font-weight: bold;
+      color: #0066cc;
+      margin-bottom: 15px;
+    }
+    .chart-svg {
+      display: block;
+      margin: 0 auto;
+    }
   `;
 
   static generateHeader(analysisData: any, companyInfo?: any): string {
@@ -359,6 +646,23 @@ class HTMLTemplateGenerator {
   }
 
   static generateTechnicalData(analysisData: any): string {
+    // Calcular potência fotovoltaica estimada baseada na produção anual
+    const annualProduction = Number(analysisData.estimated_production);
+    // HSP médio Brasil: 1.300 kWh/kWp/ano (valor conservador e realista)
+    const estimatedPvPower = (annualProduction / 1300).toFixed(1);
+    
+    // Calcular potência instalada recomendada (considerando módulos de 550Wp)
+    const recommendedPanels = Math.ceil(Number(estimatedPvPower) / 0.55);
+    const installedPower = (recommendedPanels * 0.55).toFixed(1);
+    
+    // Definir cenário de incerteza baseado na confiança
+    const uncertaintyScenarios = {
+      'Alta': '±10%',
+      'Média': '±15%', 
+      'Baixa': '±25%'
+    };
+    const uncertaintyMargin = uncertaintyScenarios[analysisData.confidence as keyof typeof uncertaintyScenarios] || '±20%';
+
     return `
       <div class="section">
         <div class="section-title">2. DADOS TÉCNICOS</div>
@@ -380,6 +684,18 @@ class HTMLTemplateGenerator {
             <div class="data-value">${Number(
               analysisData.estimated_production
             ).toLocaleString("pt-BR")} kWh/ano</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Potência Fotovoltaica Estimada</div>
+            <div class="data-value">${estimatedPvPower} kWp</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Potência Instalada Recomendada</div>
+            <div class="data-value">${installedPower} kWp</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Cenário de Incerteza</div>
+            <div class="data-value">${uncertaintyMargin}</div>
           </div>
           <div class="data-item">
             <div class="data-label">Confiança da Análise</div>
@@ -404,27 +720,118 @@ class HTMLTemplateGenerator {
     `;
   }
 
+  static generateProductionAnalysis(analysisData: any): string {
+    try {
+      const annualProduction = Number(analysisData.estimated_production) || 0;
+      
+      // Dados de irradiação mensal típicos para o Brasil (baseados em média nacional)
+      const monthlyIrradiationFactors = [
+        { month: 'Jan', factor: 1.15 }, { month: 'Fev', factor: 1.10 }, 
+        { month: 'Mar', factor: 1.05 }, { month: 'Abr', factor: 0.90 }, 
+        { month: 'Mai', factor: 0.75 }, { month: 'Jun', factor: 0.70 },
+        { month: 'Jul', factor: 0.75 }, { month: 'Ago', factor: 0.85 }, 
+        { month: 'Set', factor: 0.95 }, { month: 'Out', factor: 1.10 }, 
+        { month: 'Nov', factor: 1.20 }, { month: 'Dez', factor: 1.25 }
+      ];
+      
+      const monthlyProduction = monthlyIrradiationFactors.map(item => ({
+        label: item.month,
+        value: Math.round((annualProduction / 12) * item.factor)
+      }));
+      
+      // Calcular sazonalidade
+      const minMonth = monthlyProduction.reduce((min, curr) => curr.value < min.value ? curr : min);
+      const maxMonth = monthlyProduction.reduce((max, curr) => curr.value > max.value ? curr : max);
+      const seasonalVariation = ((maxMonth.value - minMonth.value) / minMonth.value * 100).toFixed(1);
+      
+      return `
+        <div class="section">
+          <div class="section-title">2.1 ANÁLISE DE PRODUÇÃO ENERGÉTICA</div>
+          
+          <div class="chart-container">
+            ${EChartsGenerator.generateBarChart(
+              monthlyProduction.map(item => ({ name: item.label, value: item.value })), 
+              700, 
+              350, 
+              'Produção Mensal Estimada (kWh)', 
+              '#0066cc'
+            )}
+          </div>
+          
+          <div class="data-grid">
+            <div class="data-item">
+              <div class="data-label">Produção Anual Total</div>
+              <div class="data-value">${annualProduction.toLocaleString('pt-BR')} kWh</div>
+            </div>
+            <div class="data-item">
+              <div class="data-label">Média Mensal</div>
+              <div class="data-value">${Math.round(annualProduction/12).toLocaleString('pt-BR')} kWh</div>
+            </div>
+            <div class="data-item">
+              <div class="data-label">Melhor Mês</div>
+              <div class="data-value">${maxMonth.label}: ${maxMonth.value.toLocaleString('pt-BR')} kWh</div>
+            </div>
+            <div class="data-item">
+              <div class="data-label">Variação Sazonal</div>
+              <div class="data-value">±${seasonalVariation}%</div>
+            </div>
+          </div>
+          
+          <div class="warning">
+            <strong>Observação:</strong> Os valores de produção mensal são estimativas baseadas em padrões 
+            sazonais típicos do Brasil. A produção real pode variar devido a condições climáticas locais, 
+            manutenção do sistema e outros fatores ambientais.
+          </div>
+        </div>
+      `;
+    } catch (error) {
+      console.error('Erro ao gerar análise de produção:', error);
+      return `
+        <div class="section">
+          <div class="section-title">2.1 ANÁLISE DE PRODUÇÃO ENERGÉTICA</div>
+          <div class="warning">
+            <strong>Erro:</strong> Não foi possível gerar a análise de produção energética.
+          </div>
+        </div>
+      `;
+    }
+  }
+
   static generateTechnicalSpecs(analysisData: any): string {
-    // Calcular parâmetros técnicos baseados na localização
-    const lat = Number(analysisData.coordinates.lat);
-    const optimalTilt = Math.abs(lat) - 10; // Regra prática NBR 16274
-    const optimalAzimuth = lat > 0 ? 180 : 0; // Norte geográfico para hemisfério sul
-    
-    // Perdas típicas do sistema (NBR 16274)
-    const tempLosses = 8.0; // Perdas por temperatura (típico Brasil)
-    const cableLosses = 2.0; // Perdas em cabeamento DC + AC
-    const inverterLosses = 3.0; // Perdas no inversor
-    const soilingLosses = 2.0; // Perdas por sujidade
-    const totalLosses = tempLosses + cableLosses + inverterLosses + soilingLosses;
+    try {
+      // Validar e extrair dados básicos com fallbacks
+      const lat = Number(analysisData.coordinates?.lat) || -15; // Fallback para centro do Brasil
+      const annualProduction = Number(analysisData.estimated_production) || 0;
+      const shadingLoss = Number(analysisData.shading_loss) || 0;
+      
+      // Para o Brasil (hemisfério sul), inclinação ótima é aproximadamente a latitude
+      // mas limitando entre 10° e 30° para otimizar produção anual
+      const optimalTilt = Math.min(30, Math.max(10, Math.abs(lat)));
+      
+      // Azimute para hemisfério sul: Norte geográfico = 0°/360°
+      const optimalAzimuth = lat < 0 ? 0 : 180; // Brasil está no hemisfério sul (lat negativa)
+      
+      // Calcular potência e módulos estimados
+      const estimatedPower = annualProduction > 0 ? (annualProduction / 1300).toFixed(1) : '0.0'; // HSP médio Brasil
+      const recommendedPanels = annualProduction > 0 ? Math.ceil(Number(estimatedPower) / 0.55) : 0;
+      const actualPower = (recommendedPanels * 0.55).toFixed(1);
+      
+      // Perdas típicas do sistema (NBR 16274)
+      const tempLosses = 8.0; // Perdas por temperatura (típico Brasil)
+      const cableLosses = 2.0; // Perdas em cabeamento DC + AC
+      const inverterLosses = 3.0; // Perdas no inversor
+      const soilingLosses = 2.0; // Perdas por sujidade
+      const totalSystemLosses = tempLosses + cableLosses + inverterLosses + soilingLosses;
+      const totalAllLosses = totalSystemLosses + shadingLoss;
     
     return `
       <div class="section">
         <div class="section-title">3. ESPECIFICAÇÕES TÉCNICAS</div>
         
-        <div class="section-title">3.1 Parâmetros de Instalação</div>
+        <div class="section-title">3.1 Parâmetros de Instalação Recomendados</div>
         <div class="data-grid">
           <div class="data-item">
-            <div class="data-label">Inclinação Recomendada</div>
+            <div class="data-label">Inclinação Ótima</div>
             <div class="data-value">${optimalTilt.toFixed(0)}°</div>
           </div>
           <div class="data-item">
@@ -432,26 +839,84 @@ class HTMLTemplateGenerator {
             <div class="data-value">${optimalAzimuth}° (Norte)</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Fator de Sombreamento</div>
-            <div class="data-value">${Number(analysisData.shading_loss).toFixed(1)}%</div>
+            <div class="data-label">Número de Módulos</div>
+            <div class="data-value">${recommendedPanels} unid.</div>
           </div>
           <div class="data-item">
-            <div class="data-label">Rendimento Global Estimado</div>
-            <div class="data-value">${(100 - totalLosses).toFixed(1)}%</div>
+            <div class="data-label">Potência Nominal</div>
+            <div class="data-value">${actualPower} kWp</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Área Necessária</div>
+            <div class="data-value">${(recommendedPanels * 2.8).toFixed(0)} m²</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Rendimento Global</div>
+            <div class="data-value">${(100 - totalAllLosses).toFixed(1)}%</div>
           </div>
         </div>
         
-        <div class="section-title">3.2 Perdas do Sistema (NBR 16274)</div>
-        <ul>
-          <li><strong>Perdas por Temperatura:</strong> ${tempLosses}% (coef. -0,4%/°C)</li>
-          <li><strong>Perdas em Cabeamento:</strong> ${cableLosses}% (DC + AC)</li>
-          <li><strong>Perdas no Inversor:</strong> ${inverterLosses}% (rendimento 97%)</li>
-          <li><strong>Perdas por Sujidade:</strong> ${soilingLosses}% (manutenção semestral)</li>
-          <li><strong>Perdas por Sombreamento:</strong> ${Number(analysisData.shading_loss).toFixed(1)}% (análise satellite)</li>
-          <li><strong>Total de Perdas:</strong> ${(totalLosses + Number(analysisData.shading_loss)).toFixed(1)}%</li>
-        </ul>
+        <div class="section-title">3.2 Análise de Perdas do Sistema (NBR 16274)</div>
+        
+        <div class="chart-container">
+          ${EChartsGenerator.generatePieChart([
+            { name: 'Rendimento Útil', value: parseFloat((100 - totalAllLosses).toFixed(1)) },
+            { name: 'Perdas por Temperatura', value: tempLosses },
+            { name: 'Perdas em Cabeamento', value: cableLosses },
+            { name: 'Perdas no Inversor', value: inverterLosses },
+            { name: 'Perdas por Sujidade', value: soilingLosses },
+            { name: 'Perdas por Sombreamento', value: parseFloat(shadingLoss.toFixed(1)) }
+          ], 700, 400, 'Distribuição das Perdas do Sistema Fotovoltaico')}
+        </div>
+        
+        <div class="data-grid" style="grid-template-columns: 1fr;">
+          <div class="data-item">
+            <div class="data-label">Detalhamento das Perdas</div>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+              <li><strong>Perdas por Temperatura:</strong> ${tempLosses}% (coeficiente -0,4%/°C)</li>
+              <li><strong>Perdas em Cabeamento:</strong> ${cableLosses}% (DC + AC combinado)</li>
+              <li><strong>Perdas no Inversor:</strong> ${inverterLosses}% (eficiência 97%)</li>
+              <li><strong>Perdas por Sujidade:</strong> ${soilingLosses}% (limpeza semestral)</li>
+              <li><strong>Perdas por Sombreamento:</strong> ${shadingLoss.toFixed(1)}% (análise satelital)</li>
+              <li><strong>Total de Perdas do Sistema:</strong> ${totalAllLosses.toFixed(1)}%</li>
+              <li><strong>Rendimento Global Final:</strong> ${(100 - totalAllLosses).toFixed(1)}%</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="section-title">3.3 Especificações dos Equipamentos</div>
+        <div class="data-grid">
+          <div class="data-item">
+            <div class="data-label">Módulos Fotovoltaicos</div>
+            <div class="data-value">Monocristalino 550Wp<br><small>Eficiência: ~21%</small></div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Estrutura de Fixação</div>
+            <div class="data-value">Alumínio anodizado<br><small>Garantia: 25 anos</small></div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Inversores</div>
+            <div class="data-value">String/Microinversor<br><small>Eficiência: 97%+</small></div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Cabeamento</div>
+            <div class="data-value">DC: 4mm² / AC: 6mm²<br><small>Anti-chama e UV</small></div>
+          </div>
+        </div>
       </div>
     `;
+    } catch (error) {
+      console.error('Erro ao gerar especificações técnicas:', error);
+      return `
+        <div class="section">
+          <div class="section-title">3. ESPECIFICAÇÕES TÉCNICAS</div>
+          <div class="warning">
+            <strong>Erro:</strong> Não foi possível gerar as especificações técnicas completas.
+            Os dados da análise podem estar corrompidos ou incompletos.
+          </div>
+        </div>
+      `;
+    }
   }
 
   static generateLocationSection(analysisData: any, mapImage?: string): string {
@@ -479,6 +944,31 @@ class HTMLTemplateGenerator {
     const hasImageryData = imageryMetadata && 
       (imageryMetadata.captureDate || imageryMetadata.resolution || imageryMetadata.sourceInfo);
     
+    // Função para formatar data da imagem
+    const formatImageryDate = () => {
+      if (!imageryMetadata) return 'Não disponível';
+      
+      // Verificar se existe imageryDate (formato object com year, month, day)
+      if (imageryMetadata.imageryDate) {
+        const { year, month, day } = imageryMetadata.imageryDate;
+        return `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
+      }
+      
+      // Fallback para captureDate (formato string)
+      if (imageryMetadata.captureDate) {
+        try {
+          const date = new Date(imageryMetadata.captureDate);
+          return date.toLocaleDateString('pt-BR');
+        } catch {
+          return imageryMetadata.captureDate;
+        }
+      }
+      
+      return 'Não disponível';
+    };
+    
+    const satelliteDate = formatImageryDate();
+    
     return `
       <div class="section page-break">
         <div class="section-title">4. LOCALIZAÇÃO E ÁREA ANALISADA</div>
@@ -486,6 +976,7 @@ class HTMLTemplateGenerator {
         <div style="text-align: center;">
           <img src="${imageSource}" alt="Vista satélite da área analisada" class="satellite-image" />
           <p class="subtitle">Imagem de satélite da área analisada${mapImage ? ' (capturada do mapa interativo)' : ''}</p>
+          ${satelliteDate !== 'Não disponível' ? `<p class="subtitle"><strong>Data da imagem:</strong> ${satelliteDate}</p>` : ''}
         </div>
         
         <div class="data-grid">
@@ -499,6 +990,10 @@ class HTMLTemplateGenerator {
           <div class="data-item">
             <div class="data-label">Área do Polígono</div>
             <div class="data-value">${Number(analysisData.usable_area).toLocaleString("pt-BR")} m²</div>
+          </div>
+          <div class="data-item">
+            <div class="data-label">Data da Imagem de Satélite</div>
+            <div class="data-value">${satelliteDate}</div>
           </div>
         </div>
         
@@ -647,6 +1142,26 @@ class HTMLTemplateGenerator {
         </div>
         
         <div class="section-title">6.1 Estimativas Econômicas</div>
+        
+        <div class="chart-container">
+          ${EChartsGenerator.generateLineChart([
+            { name: 'Ano 1', value: Math.round(annualSavings) },
+            { name: 'Ano 5', value: Math.round(annualSavings * 5 * 0.95) },
+            { name: 'Ano 10', value: Math.round(annualSavings * 10 * 0.9) },
+            { name: 'Ano 15', value: Math.round(annualSavings * 15 * 0.85) },
+            { name: 'Ano 20', value: Math.round(annualSavings * 20 * 0.82) },
+            { name: 'Ano 25', value: Math.round(annualSavings * 25 * 0.8) }
+          ], 700, 350, 'Economia Acumulada ao Longo de 25 Anos', '#28a745')}
+        </div>
+        
+        <div class="chart-container">
+          ${EChartsGenerator.generateBarChart([
+            { name: 'Investimento', value: Math.round(actualPower * 5000) },
+            { name: 'Economia Total', value: Math.round(annualSavings * 25 * 0.8) },
+            { name: 'Retorno Líquido', value: Math.round((annualSavings * 25 * 0.8) - (actualPower * 5000)) }
+          ], 600, 350, 'Análise Financeira - Investimento vs Retorno (25 anos)', '#0066cc')}
+        </div>
+        
         <ul>
           <li><strong>Produção Mensal Média:</strong> ${monthlyProduction.toLocaleString(
             "pt-BR"
@@ -661,7 +1176,13 @@ class HTMLTemplateGenerator {
           <li><strong>Economia em 25 anos:</strong> ${formatCurrency(
             annualSavings * 25 * 0.8
           )} (considerando degradação)</li>
-          <li><strong>Payback Estimado:</strong> 5 a 7 anos (depende do investimento)</li>
+          <li><strong>Investimento Estimado:</strong> ${formatCurrency(
+            actualPower * 5000
+          )} (R$ 5.000/kWp)</li>
+          <li><strong>Retorno Líquido:</strong> ${formatCurrency(
+            (annualSavings * 25 * 0.8) - (actualPower * 5000)
+          )}</li>
+          <li><strong>Payback Estimado:</strong> ${((actualPower * 5000) / annualSavings).toFixed(1)} anos</li>
           <li><strong>Vida Útil Garantida:</strong> 25 anos (degradação < 0,5%/ano)</li>
         </ul>
         
@@ -740,12 +1261,14 @@ class HTMLTemplateGenerator {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Laudo Técnico Solar - ${analysisData.address}</title>
+        <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
         <style>${this.CSS_STYLES}</style>
       </head>
       <body>
         ${this.generateHeader(analysisData, companyInfo)}
         ${this.generateExecutiveSummary(analysisData)}
         ${this.generateTechnicalData(analysisData)}
+        ${this.generateProductionAnalysis(analysisData)}
         ${this.generateTechnicalSpecs(analysisData)}
         ${this.generateLocationSection(analysisData, mapImage)}
         ${this.generateDataSources(analysisData)}
