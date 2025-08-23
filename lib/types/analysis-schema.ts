@@ -80,7 +80,15 @@ export const AnalysisSchema = z.object({
   technicalNote: z.string().optional(),
   
   // Metadata
-  createdAt: z.string().optional()
+  createdAt: z.string().optional(),
+  
+  // New API tracking fields
+  apiSourcesUsed: z.array(z.string()).optional(),
+  apiResponseTimes: z.record(z.string(), z.number()).optional(),
+  apiErrors: z.record(z.string(), z.string()).optional(),
+  fallbackReasons: z.array(z.string()).optional(),
+  nasaPowerData: z.any().optional(),
+  pvgisData: z.any().optional()
 });
 
 // Types

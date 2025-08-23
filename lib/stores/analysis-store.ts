@@ -71,7 +71,14 @@ const defaultData: Analysis = {
   verdict: "Não apto",
   reasons: ["Dados insuficientes"],
   footprints: [],
-  usageFactor: 0.75
+  usageFactor: 0.75,
+  // New API tracking fields with defaults
+  apiSourcesUsed: [],
+  apiResponseTimes: {},
+  apiErrors: {},
+  fallbackReasons: [],
+  nasaPowerData: null,
+  pvgisData: null
 };
 
 export const useAnalysisStore = create<AnalysisState>()(

@@ -66,6 +66,9 @@ export function ActionButtons() {
       console.log('Saving analysis to database...');
       console.log('Analysis data before saving:', JSON.stringify(data, null, 2));
       console.log('annualIrradiation field value:', data.annualIrradiation);
+      console.log('apiSourcesUsed field value:', data.apiSourcesUsed);
+      console.log('nasaPowerData field value:', data.nasaPowerData);
+      console.log('pvgisData field value:', data.pvgisData);
       
       const supabase = createClient();
       // Validate and prepare analysis data for saving using schema

@@ -68,6 +68,301 @@ const AnalyzeRequestSchema = z.object({
 });
 
 
+/* ========= INTERFACE PARA API PVGIS (PVcalc) ========= */
+
+// Interface para localização
+interface PVGISLocation {
+  latitude: number;
+  longitude: number;
+  elevation: number;
+}
+
+// Interface para dados meteorológicos
+interface PVGISMeteoData {
+  radiation_db: string;
+  meteo_db: string;
+  year_min: number;
+  year_max: number;
+  use_horizon: boolean;
+  horizon_db: string;
+}
+
+// Interface para configurações de inclinação e azimute
+interface PVGISSlopeAzimuth {
+  value: number;
+  optimal: boolean;
+}
+
+// Interface para sistema de montagem fixo
+interface PVGISFixedMounting {
+  slope: PVGISSlopeAzimuth;
+  azimuth: PVGISSlopeAzimuth;
+  type: string;
+}
+
+// Interface para sistema de montagem
+interface PVGISMountingSystem {
+  fixed: PVGISFixedMounting;
+}
+
+// Interface para módulo fotovoltaico
+interface PVGISPVModule {
+  technology: string;
+  peak_power: number;
+  system_loss: number;
+}
+
+// Interface para dados econômicos
+interface PVGISEconomicData {
+  system_cost: number | null;
+  interest: number | null;
+  lifetime: number | null;
+}
+
+// Interface para entradas da API PVGIS
+interface PVGISInputs {
+  location: PVGISLocation;
+  meteo_data: PVGISMeteoData;
+  mounting_system: PVGISMountingSystem;
+  pv_module: PVGISPVModule;
+  economic_data: PVGISEconomicData;
+}
+
+// Interface para dados mensais
+interface PVGISMonthlyData {
+  month: number;
+  E_d: number;
+  E_m: number;
+  "H(i)_d": number;
+  "H(i)_m": number;
+  SD_m: number;
+}
+
+// Interface para saídas mensais
+interface PVGISMonthlyOutputs {
+  fixed: PVGISMonthlyData[];
+}
+
+// Interface para totais fixos
+interface PVGISFixedTotals {
+  E_d: number;
+  E_m: number;
+  E_y: number;
+  "H(i)_d": number;
+  "H(i)_m": number;
+  "H(i)_y": number;
+  SD_m: number;
+  SD_y: number;
+  l_aoi: number;
+  l_spec: string;
+  l_tg: number;
+  l_total: number;
+}
+
+// Interface para totais
+interface PVGISTotals {
+  fixed: PVGISFixedTotals;
+}
+
+// Interface para saídas da API PVGIS
+interface PVGISOutputs {
+  monthly: PVGISMonthlyOutputs;
+  totals: PVGISTotals;
+}
+
+// Interface para variáveis de metadados
+interface PVGISMetaVariable {
+  description: string;
+  units?: string;
+}
+
+// Interface para campos de metadados
+interface PVGISMetaField {
+  description: string;
+  units?: string;
+}
+
+// Interface para metadados de entrada
+interface PVGISMetaInputs {
+  location: {
+    description: string;
+    variables: {
+      latitude: PVGISMetaVariable;
+      longitude: PVGISMetaVariable;
+      elevation: PVGISMetaVariable;
+    };
+  };
+  meteo_data: {
+    description: string;
+    variables: {
+      radiation_db: PVGISMetaVariable;
+      meteo_db: PVGISMetaVariable;
+      year_min: PVGISMetaVariable;
+      year_max: PVGISMetaVariable;
+      use_horizon: PVGISMetaVariable;
+      horizon_db: PVGISMetaVariable;
+    };
+  };
+  mounting_system: {
+    description: string;
+    choices: string;
+    fields: {
+      slope: PVGISMetaField;
+      azimuth: PVGISMetaField;
+    };
+  };
+  pv_module: {
+    description: string;
+    variables: {
+      technology: PVGISMetaVariable;
+      peak_power: PVGISMetaVariable;
+      system_loss: PVGISMetaVariable;
+    };
+  };
+  economic_data: {
+    description: string;
+    variables: {
+      system_cost: PVGISMetaVariable;
+      interest: PVGISMetaVariable;
+      lifetime: PVGISMetaVariable;
+    };
+  };
+}
+
+// Interface para metadados de saída
+interface PVGISMetaOutputs {
+  monthly: {
+    type: string;
+    timestamp: string;
+    variables: {
+      E_d: PVGISMetaVariable;
+      E_m: PVGISMetaVariable;
+      "H(i)_d": PVGISMetaVariable;
+      "H(i)_m": PVGISMetaVariable;
+      SD_m: PVGISMetaVariable;
+    };
+  };
+  totals: {
+    type: string;
+    variables: {
+      E_d: PVGISMetaVariable;
+      E_m: PVGISMetaVariable;
+      E_y: PVGISMetaVariable;
+      "H(i)_d": PVGISMetaVariable;
+      "H(i)_m": PVGISMetaVariable;
+      "H(i)_y": PVGISMetaVariable;
+      SD_m: PVGISMetaVariable;
+      SD_y: PVGISMetaVariable;
+      l_aoi: PVGISMetaVariable;
+      l_spec: PVGISMetaVariable;
+      l_tg: PVGISMetaVariable;
+      l_total: PVGISMetaVariable;
+    };
+  };
+}
+
+// Interface para metadados
+interface PVGISMeta {
+  inputs: PVGISMetaInputs;
+  outputs: PVGISMetaOutputs;
+}
+
+// Interface principal para resposta da API PVGIS
+interface PVGISResponse {
+  inputs: PVGISInputs;
+  outputs: PVGISOutputs;
+  meta: PVGISMeta;
+}
+
+/* ========= INTERFACE PARA API NASA POWER ========= */
+
+// Interface para geometria do ponto
+interface NASAGeometry {
+  type: "Point";
+  coordinates: [number, number, number]; // [longitude, latitude, elevation]
+}
+
+// Interface para parâmetros de irradiação solar
+interface NASASolarParameter {
+  [date: string]: number; // YYYYMMDD format
+}
+
+// Interface para parâmetros
+interface NASAParameters {
+  ALLSKY_SFC_SW_DWN: NASASolarParameter;
+  [key: string]: NASASolarParameter; // Para outros parâmetros possíveis
+}
+
+// Interface para propriedades
+interface NASAProperties {
+  parameter: NASAParameters;
+}
+
+// Interface para API do cabeçalho
+interface NASAHeaderAPI {
+  version: string;
+  name: string;
+}
+
+// Interface para cabeçalho
+interface NASAHeader {
+  title: string;
+  api: NASAHeaderAPI;
+  sources: string[];
+  fill_value: number;
+  time_standard: string;
+  start: string;
+  end: string;
+}
+
+// Interface para definições de parâmetros
+interface NASAParameterDefinition {
+  units: string;
+  longname: string;
+}
+
+// Interface para definições de parâmetros
+interface NASAParameterDefinitions {
+  ALLSKY_SFC_SW_DWN: NASAParameterDefinition;
+  [key: string]: NASAParameterDefinition; // Para outros parâmetros possíveis
+}
+
+// Interface para tempos de processamento
+interface NASATimes {
+  data: number;
+  process: number;
+}
+
+// Interface principal para resposta da API NASA POWER
+interface NASAPowerResponse {
+  type: "Feature";
+  geometry: NASAGeometry;
+  properties: NASAProperties;
+  header: NASAHeader;
+  messages: string[];
+  parameters: NASAParameterDefinitions;
+  times: NASATimes;
+}
+
+/* ========= API TRACKING TYPES ========= */
+interface ApiTracker {
+  sourcesUsed: string[];
+  responseTimes: { [key: string]: number };
+  errors: { [key: string]: string };
+  fallbackReasons: string[];
+  nasaPowerData?: NASAPowerResponse;
+  pvgisData?: PVGISResponse;
+}
+
+function createApiTracker(): ApiTracker {
+  return {
+    sourcesUsed: [],
+    responseTimes: {},
+    errors: {},
+    fallbackReasons: [],
+  };
+}
+
 /* ========= TIPOS GOOGLE SOLAR ========= */
 type SolarApiResponse = {
   solarPotential?: {
@@ -477,34 +772,144 @@ function classifyVerdict(params: {
 /* ========= DATASOURCES ========= */
 async function getGoogleSolarData(
   lat: number,
-  lng: number
+  lng: number,
+  apiTracker?: ApiTracker
 ): Promise<SolarApiResponse | null> {
-  if (!GOOGLE_SOLAR_API_KEY) return null;
-  const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&key=${GOOGLE_SOLAR_API_KEY}`;
-  const res = await fetchWithTimeout(url, 8000);
-  const j = (await res.json()) as SolarApiResponse;
-  if (j?.error) return null;
-  if (!j?.solarPotential) return null;
-  return j;
+  if (!GOOGLE_SOLAR_API_KEY) {
+    if (apiTracker) {
+      apiTracker.errors['GOOGLE_SOLAR'] = 'API key not configured';
+      apiTracker.fallbackReasons.push('Google Solar API key not configured');
+    }
+    return null;
+  }
+  
+  const startTime = Date.now();
+  
+  try {
+    const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&key=${GOOGLE_SOLAR_API_KEY}`;
+    const res = await fetchWithTimeout(url, 8000);
+    const responseTime = Date.now() - startTime;
+    
+    if (apiTracker) {
+      apiTracker.responseTimes['GOOGLE_SOLAR'] = responseTime;
+    }
+    
+    const j = (await res.json()) as SolarApiResponse;
+    
+    if (j?.error) {
+      if (apiTracker) {
+        apiTracker.errors['GOOGLE_SOLAR'] = `${j.error.code}: ${j.error.message}`;
+        apiTracker.fallbackReasons.push('Google Solar API returned error');
+      }
+      return null;
+    }
+    
+    if (!j?.solarPotential) {
+      if (apiTracker) {
+        apiTracker.errors['GOOGLE_SOLAR'] = 'No solar potential data available';
+        apiTracker.fallbackReasons.push('No Google Solar data available for location');
+      }
+      return null;
+    }
+    
+    if (apiTracker) {
+      apiTracker.sourcesUsed.push('GOOGLE_SOLAR');
+    }
+    
+    return j;
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    
+    if (apiTracker) {
+      apiTracker.responseTimes['GOOGLE_SOLAR'] = responseTime;
+      apiTracker.errors['GOOGLE_SOLAR'] = error instanceof Error ? error.message : 'Unknown error';
+      apiTracker.fallbackReasons.push('Google Solar API request failed');
+    }
+    
+    return null;
+  }
 }
 
-async function getNASAGHI(lat: number, lng: number) {
+async function getPVGISData(lat: number, lng: number, apiTracker?: ApiTracker): Promise<PVGISResponse | null> {
+  const startTime = Date.now();
+  
+  try {
+    // PVGIS API endpoint for photovoltaic calculation
+    const url = `https://re.jrc.ec.europa.eu/api/v5_2/PVcalc?lat=${lat}&lon=${lng}&raddatabase=PVGIS-SARAH2&browser=0&outputformat=json&usehorizon=1&userhorizon=&js=1&select_database_grid=PVGIS-SARAH2&pvtechchoice=crystSi&peakpower=1&loss=14&mountingplace=free&angle=35&aspect=0`;
+    
+    const res = await fetchWithTimeout(url, 10000);
+    const responseTime = Date.now() - startTime;
+    
+    if (apiTracker) {
+      apiTracker.responseTimes['PVGIS'] = responseTime;
+    }
+    
+    if (!res.ok) throw new Error("PVGIS API error");
+    const j = await res.json() as PVGISResponse;
+    
+    if (!j?.outputs) throw new Error("No PVGIS data available");
+    
+    if (apiTracker) {
+      apiTracker.sourcesUsed.push('PVGIS');
+      apiTracker.pvgisData = j;
+    }
+    
+    return j;
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    
+    if (apiTracker) {
+      apiTracker.responseTimes['PVGIS'] = responseTime;
+      apiTracker.errors['PVGIS'] = error instanceof Error ? error.message : 'Unknown error';
+      apiTracker.fallbackReasons.push('PVGIS API failed');
+    }
+    
+    return null;
+  }
+}
+
+async function getNASAGHI(lat: number, lng: number, apiTracker?: ApiTracker) {
   const year = new Date().getFullYear() - 1;
   const start = `${year}0101`;
   const end = `${year}1231`;
   const url = `https://power.larc.nasa.gov/api/temporal/daily/point?parameters=ALLSKY_SFC_SW_DWN&community=RE&longitude=${lng}&latitude=${lat}&start=${start}&end=${end}&format=JSON`;
+  
+  const startTime = Date.now();
+  
   try {
     const res = await fetchWithTimeout(url, 10000);
+    const responseTime = Date.now() - startTime;
+    
+    if (apiTracker) {
+      apiTracker.responseTimes['NASA_POWER'] = responseTime;
+    }
+    
     if (!res.ok) throw new Error("NASA API error");
-    const j = await res.json();
+    const j = await res.json() as NASAPowerResponse;
+    
     const days = j?.properties?.parameter?.ALLSKY_SFC_SW_DWN;
     if (!days) throw new Error("No data from NASA");
+    
     const sum = Object.values(days).reduce(
       (acc: number, v: unknown) => acc + (typeof v === "number" ? v : 0),
       0
     );
+    
+    if (apiTracker) {
+      apiTracker.sourcesUsed.push('NASA_POWER');
+      apiTracker.nasaPowerData = j;
+    }
+    
     return { ghi_kwh_m2_year: sum as number };
-  } catch {
+  } catch (error) {
+    const responseTime = Date.now() - startTime;
+    
+    if (apiTracker) {
+      apiTracker.responseTimes['NASA_POWER'] = responseTime;
+      apiTracker.errors['NASA_POWER'] = error instanceof Error ? error.message : 'Unknown error';
+      apiTracker.fallbackReasons.push('NASA POWER API failed, using regional defaults');
+    }
+    
     return { ghi_kwh_m2_year: getBrazilianTypicalGHI(lat) };
   }
 }
@@ -617,26 +1022,70 @@ async function processGoogleSolarData(
   let ghi_kwh_m2_year = 0;
   let irradiationSource = "";
 
+  // Initialize API tracker for this analysis
+  const apiTracker = createApiTracker();
+
+  // SEMPRE fazer chamadas para TODAS as APIs de fallback para ter dados completos
+  console.log("Fazendo chamadas para todas as APIs de fallback...");
+  
+  // Fazer chamadas paralelas para ambas as APIs de fallback
+  const [nasaResult, pvgisResult] = await Promise.allSettled([
+    getNASAGHI(lat, lng, apiTracker).catch(() => null),
+    getPVGISData(lat, lng, apiTracker).catch(() => null)
+  ]);
+
+  // Extrair dados das chamadas
+  const nasa = nasaResult.status === 'fulfilled' ? nasaResult.value : null;
+  const pvgis = pvgisResult.status === 'fulfilled' ? pvgisResult.value : null;
+
+  // Log dos resultados das APIs
+  console.log("NASA POWER result:", nasa ? "SUCCESS" : "FAILED");
+  console.log("PVGIS result:", pvgis ? "SUCCESS" : "FAILED");
+
+  // Agora escolher qual usar baseado na preferência
   if (preferredSource === "NASA") {
-    const nasa = await getNASAGHI(lat, lng).catch(() => null);
     if (nasa?.ghi_kwh_m2_year) {
       ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
       irradiationSource = "NASA POWER (GHI) - Fonte Preferida";
+    } else if (pvgis?.outputs?.totals?.fixed?.["H(i)_y"]) {
+      ghi_kwh_m2_year = pvgis.outputs.totals.fixed["H(i)_y"];
+      irradiationSource = "PVGIS (fallback from NASA preferred)";
+      apiTracker.fallbackReasons.push('NASA POWER preferred but failed, using PVGIS');
+    } else {
+      ghi_kwh_m2_year = isBrazil ? getBrazilianTypicalGHI(lat) : 1800;
+      irradiationSource = "Valores típicos (fallback from NASA preferred)";
+      apiTracker.fallbackReasons.push('NASA POWER preferred but both APIs failed, using regional defaults');
     }
   } else if (preferredSource === "PVGIS") {
-    ghi_kwh_m2_year = isBrazil ? getBrazilianTypicalGHI(lat) : 1800;
-    irradiationSource = "PVGIS - Fonte Preferida";
+    if (pvgis?.outputs?.totals?.fixed?.["H(i)_y"]) {
+      ghi_kwh_m2_year = pvgis.outputs.totals.fixed["H(i)_y"];
+      irradiationSource = "PVGIS - Fonte Preferida";
+    } else if (nasa?.ghi_kwh_m2_year) {
+      ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
+      irradiationSource = "NASA POWER (fallback from PVGIS preferred)";
+      apiTracker.fallbackReasons.push('PVGIS preferred but failed, using NASA POWER');
+    } else {
+      ghi_kwh_m2_year = isBrazil ? getBrazilianTypicalGHI(lat) : 1800;
+      irradiationSource = "Valores típicos (fallback from PVGIS preferred)";
+      apiTracker.fallbackReasons.push('PVGIS preferred but both APIs failed, using regional defaults');
+    }
   } else {
-    const nasa = await getNASAGHI(lat, lng).catch(() => null);
+    // Default cascade: NASA -> PVGIS -> Regional defaults
     if (nasa?.ghi_kwh_m2_year) {
       ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
       irradiationSource = "NASA POWER (GHI)";
+    } else if (pvgis?.outputs?.totals?.fixed?.["H(i)_y"]) {
+      ghi_kwh_m2_year = pvgis.outputs.totals.fixed["H(i)_y"];
+      irradiationSource = "PVGIS (fallback from NASA)";
+      apiTracker.fallbackReasons.push('NASA POWER failed, using PVGIS');
     } else if (isBrazil) {
       ghi_kwh_m2_year = getBrazilianTypicalGHI(lat);
       irradiationSource = "Valores típicos brasileiros";
+      apiTracker.fallbackReasons.push('All external APIs failed, using Brazilian regional defaults');
     } else {
       ghi_kwh_m2_year = 1800;
       irradiationSource = "Heurística conservadora";
+      apiTracker.fallbackReasons.push('All external APIs failed, using conservative defaults');
     }
   }
 
@@ -798,6 +1247,13 @@ async function processGoogleSolarData(
     footprints,
     googleSolarData: { ...solar, derived },
     technicalNote,
+    // API tracking data
+    apiSourcesUsed: apiTracker.sourcesUsed,
+    apiResponseTimes: apiTracker.responseTimes,
+    apiErrors: apiTracker.errors,
+    fallbackReasons: apiTracker.fallbackReasons,
+    nasaPowerData: apiTracker.nasaPowerData,
+    pvgisData: apiTracker.pvgisData,
   };
 }
 
@@ -884,26 +1340,70 @@ async function processFallbackAnalysis({
   let ghi_kwh_m2_year = 0;
   let irradiationSource = "";
 
+  // Initialize API tracker for fallback analysis
+  const apiTracker = createApiTracker();
+
+  // SEMPRE fazer chamadas para TODAS as APIs de fallback para ter dados completos
+  console.log("Fazendo chamadas para todas as APIs de fallback (fallback analysis)...");
+  
+  // Fazer chamadas paralelas para ambas as APIs de fallback
+  const [nasaResult, pvgisResult] = await Promise.allSettled([
+    getNASAGHI(lat, lng, apiTracker).catch(() => null),
+    getPVGISData(lat, lng, apiTracker).catch(() => null)
+  ]);
+
+  // Extrair dados das chamadas
+  const nasa = nasaResult.status === 'fulfilled' ? nasaResult.value : null;
+  const pvgis = pvgisResult.status === 'fulfilled' ? pvgisResult.value : null;
+
+  // Log dos resultados das APIs
+  console.log("NASA POWER result (fallback analysis):", nasa ? "SUCCESS" : "FAILED");
+  console.log("PVGIS result (fallback analysis):", pvgis ? "SUCCESS" : "FAILED");
+
+  // Agora escolher qual usar baseado na preferência
   if (preferredSource === "NASA") {
-    const nasa = await getNASAGHI(lat, lng).catch(() => null);
     if (nasa?.ghi_kwh_m2_year) {
       ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
       irradiationSource = "NASA POWER (GHI) - Fonte Preferida";
+    } else if (pvgis?.outputs?.totals?.fixed?.["H(i)_y"]) {
+      ghi_kwh_m2_year = pvgis.outputs.totals.fixed["H(i)_y"];
+      irradiationSource = "PVGIS (fallback from NASA preferred)";
+      apiTracker.fallbackReasons.push('NASA POWER preferred but failed, using PVGIS');
+    } else {
+      ghi_kwh_m2_year = isBrazil ? getBrazilianTypicalGHI(lat) : 1800;
+      irradiationSource = "Valores típicos (fallback from NASA preferred)";
+      apiTracker.fallbackReasons.push('NASA POWER preferred but both APIs failed, using regional defaults');
     }
   } else if (preferredSource === "PVGIS") {
-    ghi_kwh_m2_year = isBrazil ? getBrazilianTypicalGHI(lat) : 1800;
-    irradiationSource = "PVGIS - Fonte Preferida";
+    if (pvgis?.outputs?.totals?.fixed?.["H(i)_y"]) {
+      ghi_kwh_m2_year = pvgis.outputs.totals.fixed["H(i)_y"];
+      irradiationSource = "PVGIS - Fonte Preferida";
+    } else if (nasa?.ghi_kwh_m2_year) {
+      ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
+      irradiationSource = "NASA POWER (fallback from PVGIS preferred)";
+      apiTracker.fallbackReasons.push('PVGIS preferred but failed, using NASA POWER');
+    } else {
+      ghi_kwh_m2_year = isBrazil ? getBrazilianTypicalGHI(lat) : 1800;
+      irradiationSource = "Valores típicos (fallback from PVGIS preferred)";
+      apiTracker.fallbackReasons.push('PVGIS preferred but both APIs failed, using regional defaults');
+    }
   } else {
-    const nasa = await getNASAGHI(lat, lng).catch(() => null);
+    // Default cascade: NASA -> PVGIS -> Regional defaults
     if (nasa?.ghi_kwh_m2_year) {
       ghi_kwh_m2_year = nasa.ghi_kwh_m2_year;
       irradiationSource = "NASA POWER (GHI)";
+    } else if (pvgis?.outputs?.totals?.fixed?.["H(i)_y"]) {
+      ghi_kwh_m2_year = pvgis.outputs.totals.fixed["H(i)_y"];
+      irradiationSource = "PVGIS (fallback from NASA)";
+      apiTracker.fallbackReasons.push('NASA POWER failed, using PVGIS');
     } else if (isBrazil) {
       ghi_kwh_m2_year = getBrazilianTypicalGHI(lat);
       irradiationSource = "Valores típicos brasileiros";
+      apiTracker.fallbackReasons.push('All external APIs failed, using Brazilian regional defaults');
     } else {
       ghi_kwh_m2_year = 1800;
       irradiationSource = "Heurística conservadora";
+      apiTracker.fallbackReasons.push('All external APIs failed, using conservative defaults');
     }
   }
 
@@ -1010,6 +1510,13 @@ async function processFallbackAnalysis({
     warnings: cls.warnings,
     footprints,
     technicalNote,
+    // API tracking data
+    apiSourcesUsed: apiTracker.sourcesUsed,
+    apiResponseTimes: apiTracker.responseTimes,
+    apiErrors: apiTracker.errors,
+    fallbackReasons: apiTracker.fallbackReasons,
+    nasaPowerData: apiTracker.nasaPowerData,
+    pvgisData: apiTracker.pvgisData,
   };
 }
 
@@ -1078,7 +1585,8 @@ Deno.serve(async (req: Request) => {
     }
 
     let analysis;
-    const google = await getGoogleSolarData(lat, lng).catch(() => null);
+    const apiTracker = createApiTracker();
+    const google = await getGoogleSolarData(lat, lng, apiTracker).catch(() => null);
 
     if (google?.solarPotential) {
       console.log("Usando dados Google Solar (se disponível)");
@@ -1136,6 +1644,13 @@ Deno.serve(async (req: Request) => {
           : "PVGIS/NASA",
       },
     };
+
+    // Debug log before returning
+    console.log('Final response - apiResponseTimes:', response.data?.apiResponseTimes);
+    console.log('Final response - apiResponseTimes type check:', typeof response.data?.apiResponseTimes);
+    if (response.data?.apiResponseTimes) {
+      console.log('Final response - apiResponseTimes entries:', Object.entries(response.data.apiResponseTimes));
+    }
 
     return new Response(JSON.stringify(response), {
       status: 200,

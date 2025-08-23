@@ -79,6 +79,13 @@ const AnalysisSchema = z.object({
       updateFootprint: z.boolean().optional(),
     })
     .optional(),
+  // New fields for API tracking
+  apiSourcesUsed: z.array(z.string()).optional(),
+  apiResponseTimes: z.record(z.number()).optional(),
+  apiErrors: z.record(z.string()).optional(),
+  fallbackReasons: z.array(z.string()).optional(),
+  nasaPowerData: z.any().optional(),
+  pvgisData: z.any().optional(),
 });
 
 const SaveAnalysisRequestSchema = z.object({
@@ -138,6 +145,13 @@ async function saveAnalysisToDatabase(
       technical_note: analysisData.technicalNote,
       original_analysis_id: analysisData.originalAnalysisId || null,
       reprocess_parameters: analysisData.reprocessParameters || null,
+      // New API tracking fields
+      api_sources_used: analysisData.apiSourcesUsed || [],
+      api_response_times: analysisData.apiResponseTimes || {},
+      api_errors: analysisData.apiErrors || {},
+      fallback_reasons: analysisData.fallbackReasons || [],
+      nasa_power_data: analysisData.nasaPowerData || null,
+      pvgis_data: analysisData.pvgisData || null,
     };
 
     const { data, error } = await supabase

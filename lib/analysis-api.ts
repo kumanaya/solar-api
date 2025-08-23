@@ -64,6 +64,13 @@ interface AnalysisResponse {
       coordinates: number[][][];
       source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
     };
+    // New API tracking fields
+    apiSourcesUsed?: string[];
+    apiResponseTimes?: { [key: string]: number };
+    apiErrors?: { [key: string]: string };
+    fallbackReasons?: string[];
+    nasaPowerData?: object;
+    pvgisData?: object;
   };
   error?: string;
   errorCode?: string;
@@ -194,6 +201,11 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
 
   console.log('transformAnalysisData - apiData keys:', Object.keys(apiData));
   console.log('transformAnalysisData - annualGHI value:', apiData.annualGHI);
+  console.log('transformAnalysisData - apiResponseTimes:', apiData.apiResponseTimes);
+  console.log('transformAnalysisData - apiResponseTimes type:', typeof apiData.apiResponseTimes);
+  if (apiData.apiResponseTimes) {
+    console.log('transformAnalysisData - apiResponseTimes entries:', Object.entries(apiData.apiResponseTimes));
+  }
 
   return {
     id: apiData.id,
@@ -236,6 +248,13 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
     technicalNote: apiData.technicalNote,
     createdAt: apiData.createdAt,
     updatedAt: apiData.updatedAt,
-    customPolygon: apiData.customPolygon
+    customPolygon: apiData.customPolygon,
+    // New API tracking fields
+    apiSourcesUsed: apiData.apiSourcesUsed,
+    apiResponseTimes: apiData.apiResponseTimes,
+    apiErrors: apiData.apiErrors,
+    fallbackReasons: apiData.fallbackReasons,
+    nasaPowerData: apiData.nasaPowerData,
+    pvgisData: apiData.pvgisData,
   };
 }
