@@ -185,6 +185,7 @@ Deno.serve(async (req: Request) => {
       footprints: analysis.footprints,
       googleSolarData: analysis.google_solar_data,
       technicalNote: analysis.technical_note,
+      technicianInputs: analysis.technician_inputs,
       createdAt: analysis.created_at,
       updatedAt: analysis.updated_at
     };

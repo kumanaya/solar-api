@@ -78,7 +78,22 @@ const defaultData: Analysis = {
   apiErrors: {},
   fallbackReasons: [],
   nasaPowerData: null,
-  pvgisData: null
+  pvgisData: null,
+  // Technician inputs with defaults
+  technicianInputs: {
+    panel_count: null,
+    energy_cost_per_kwh: null,
+    solar_incentives: null,
+    installation_cost_per_watt: null,
+    panel_capacity_watts: null,
+    show_advanced_settings: false,
+    additional_details: null,
+    system_lifetime_years: 25,
+    dc_to_ac_conversion: 0.96,
+    annual_degradation_rate: 0.6,
+    annual_energy_cost_increase: 5.0,
+    discount_rate: 6.0
+  }
 };
 
 export const useAnalysisStore = create<AnalysisState>()(

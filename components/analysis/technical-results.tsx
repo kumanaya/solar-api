@@ -10,7 +10,8 @@ import {
   VerdictCard,
   SystemConfigCard,
   SystemLifetimeCard,
-  ImageryInfoCard
+  ImageryInfoCard,
+  FinancialAnalysisCard
 } from "@/components/shared/analysis-cards";
 
 export function TechnicalResults() {
@@ -28,6 +29,7 @@ export function TechnicalResults() {
       estimatedProduction: Math.floor((data.footprints[0]?.area * value || 0) * data.annualIrradiation * 0.15)
     });
   };
+
 
   if (isLoading) {
     return (
@@ -75,6 +77,11 @@ export function TechnicalResults() {
       />
 
       <SystemLifetimeCard
+        estimatedProduction={data.estimatedProduction}
+      />
+
+      <FinancialAnalysisCard
+        technicianInputs={data.technicianInputs}
         estimatedProduction={data.estimatedProduction}
       />
 

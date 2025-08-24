@@ -16,6 +16,8 @@ import {
   TechnicalDetailsCard,
   RecommendationsCard,
   WarningsCard,
+  TechnicianInputsCard,
+  FinancialAnalysisCard,
 } from "@/components/shared/analysis-cards";
 import { useState } from "react";
 
@@ -195,6 +197,18 @@ export function TechnicalPanel() {
           />
 
           <WarningsCard warnings={analysis.warnings ?? []} isLocked={true} />
+
+          <TechnicianInputsCard
+            technicianInputs={analysis.technicianInputs}
+            isEditable={false}
+            isLocked={true}
+          />
+
+          <FinancialAnalysisCard
+            technicianInputs={analysis.technicianInputs}
+            estimatedProduction={cv.estimatedProduction}
+            isLocked={true}
+          />
 
           <VerdictCard
             verdict={cv.verdict}

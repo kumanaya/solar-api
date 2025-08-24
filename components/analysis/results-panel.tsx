@@ -3,6 +3,7 @@
 import { CoverageStatus } from "./coverage-status";
 import { TechnicalResults } from "./technical-results";
 import { ActionButtons } from "./action-buttons";
+import { TechnicianInputsPanel } from "./technician-inputs-panel";
 import { useAnalysis } from "./analysis-context";
 import { AlertCircle } from "lucide-react";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
@@ -13,7 +14,7 @@ interface ResultsPanelProps {
 }
 
 export function ResultsPanel({ mapRef }: ResultsPanelProps) {
-  const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading, setHasAnalysisResults } = useAnalysis();
+  const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading, setHasAnalysisResults, hasAnalysisResults } = useAnalysis();
   
   const { isFootprintError } = useErrorHandler();
   
@@ -111,6 +112,10 @@ export function ResultsPanel({ mapRef }: ResultsPanelProps) {
         {/* Status de cobertura */}
         <CoverageStatus />
 
+        {/* Inputs do técnico - aparece quando há endereço selecionado */}
+        {selectedAddress && !hasAnalysisResults && (
+          <TechnicianInputsPanel />
+        )}
 
         {/* Resultados técnicos */}
         <TechnicalResults />

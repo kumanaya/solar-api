@@ -43,4 +43,18 @@ export interface DetailedAnalysis {
   reasons: string[];
   technicalNote?: string;
   googleSolarData?: any;
+  technicianInputs?: {
+    panel_count?: number | null;
+    energy_cost_per_kwh?: number | null;
+    solar_incentives?: number | null;
+    installation_cost_per_watt?: number | null;
+    panel_capacity_watts?: number | null;
+    show_advanced_settings?: boolean;
+    additional_details?: string | null;
+    system_lifetime_years?: number | null;
+    dc_to_ac_conversion?: number | null;
+    annual_degradation_rate?: number | null;
+    annual_energy_cost_increase?: number | null;
+    discount_rate?: number | null;
+  };
 }

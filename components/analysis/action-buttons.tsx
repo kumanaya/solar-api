@@ -341,7 +341,8 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
         lat,
         lng,
         polygonToSend,
-        usableAreaOverride
+        usableAreaOverride,
+        data.technicianInputs
       );
       
       if (!result.success) {

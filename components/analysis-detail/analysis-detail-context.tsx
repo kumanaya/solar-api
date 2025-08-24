@@ -115,7 +115,8 @@ const transformApiDataToDetailedAnalysis = (apiData: ReturnType<typeof transform
         },
         reprocessCount: 0, // TODO: Implement reprocess count in database
         technicalNote: apiData.technicalNote,
-        reasons: apiData.reasons
+        reasons: apiData.reasons,
+        technicianInputs: apiData.technicianInputs
       };
 };
 

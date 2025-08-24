@@ -64,6 +64,21 @@ const AnalyzeRequestSchema = z.object({
   systemAge: z.number().min(0).max(30).optional(),
   tiltEstimated: z.number().min(0).max(60).optional(),
   preferredSource: z.enum(["PVGIS", "NASA"]).optional(),
+  // Technician inputs
+  technicianInputs: z.object({
+    panel_count: z.number().nullable().optional(),
+    energy_cost_per_kwh: z.number().nullable().optional(),
+    solar_incentives: z.number().nullable().optional(),
+    installation_cost_per_watt: z.number().nullable().optional(),
+    panel_capacity_watts: z.number().nullable().optional(),
+    show_advanced_settings: z.boolean().optional(),
+    additional_details: z.string().nullable().optional(),
+    system_lifetime_years: z.number().nullable().optional(),
+    dc_to_ac_conversion: z.number().nullable().optional(),
+    annual_degradation_rate: z.number().nullable().optional(),
+    annual_energy_cost_increase: z.number().nullable().optional(),
+    discount_rate: z.number().nullable().optional()
+  }).optional(),
 
 });
 
@@ -957,7 +972,8 @@ async function processGoogleSolarData(
   moduleType?: string,
   systemAge?: number,
   tiltEstimated?: number,
-  preferredSource?: "PVGIS" | "NASA"
+  preferredSource?: "PVGIS" | "NASA",
+  technicianInputs?: any
 ) {
   const sp = solar.solarPotential!;
   const wholeArea = sp.wholeRoofStats?.areaMeters2 ?? 0;
@@ -1254,6 +1270,7 @@ async function processGoogleSolarData(
     fallbackReasons: apiTracker.fallbackReasons,
     nasaPowerData: apiTracker.nasaPowerData,
     pvgisData: apiTracker.pvgisData,
+    technicianInputs: technicianInputs,
   };
 }
 
@@ -1318,6 +1335,7 @@ async function processFallbackAnalysis({
   systemAge,
   tiltEstimated,
   preferredSource,
+  technicianInputs,
 
 }: {
   lat: number;
@@ -1336,6 +1354,7 @@ async function processFallbackAnalysis({
   systemAge?: number;
   tiltEstimated?: number;
   preferredSource?: "PVGIS" | "NASA";
+  technicianInputs?: any;
 
 }) {
   const isBrazil = isBrazilianCoordinate(lat, lng);
@@ -1563,7 +1582,8 @@ async function processFallbackAnalysis({
     apiErrors: apiTracker.errors,
     fallbackReasons: apiTracker.fallbackReasons,
     nasaPowerData: apiTracker.nasaPowerData,
-    pvgisData: apiTracker.pvgisData
+    pvgisData: apiTracker.pvgisData,
+    technicianInputs: technicianInputs
   };
 }
 
@@ -1651,7 +1671,7 @@ Deno.serve(async (req: Request) => {
         input.systemAge,
         input.tiltEstimated,
         input.preferredSource,
-        input.updateFootprint
+        input.technicianInputs
       );
     } else {
       // Fallback: sempre retorna com annualIrradiation (número) padronizado!
@@ -1671,6 +1691,7 @@ Deno.serve(async (req: Request) => {
         systemAge: input.systemAge,
         tiltEstimated: input.tiltEstimated,
         preferredSource: input.preferredSource,
+        technicianInputs: input.technicianInputs,
 
       });
       // Garante o campo annualIrradiation no output

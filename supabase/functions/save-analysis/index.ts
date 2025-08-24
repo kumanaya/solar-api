@@ -94,6 +94,21 @@ const AnalysisSchema = z.object({
     sourceInfo: z.string().optional(),
     accuracy: z.string().optional()
   }).optional(),
+  // Technician inputs
+  technicianInputs: z.object({
+    panel_count: z.number().nullable().optional(),
+    energy_cost_per_kwh: z.number().nullable().optional(),
+    solar_incentives: z.number().nullable().optional(),
+    installation_cost_per_watt: z.number().nullable().optional(),
+    panel_capacity_watts: z.number().nullable().optional(),
+    show_advanced_settings: z.boolean().optional(),
+    additional_details: z.string().nullable().optional(),
+    system_lifetime_years: z.number().nullable().optional(),
+    dc_to_ac_conversion: z.number().nullable().optional(),
+    annual_degradation_rate: z.number().nullable().optional(),
+    annual_energy_cost_increase: z.number().nullable().optional(),
+    discount_rate: z.number().nullable().optional()
+  }).optional(),
 });
 
 const SaveAnalysisRequestSchema = z.object({
@@ -161,6 +176,7 @@ async function saveAnalysisToDatabase(
       nasa_power_data: analysisData.nasaPowerData || null,
       pvgis_data: analysisData.pvgisData || null,
       imagery_metadata: analysisData.imageryMetadata || null,
+      technician_inputs: analysisData.technicianInputs || null,
     };
 
     const { data, error } = await supabase

@@ -76,7 +76,7 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
 export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, showShadow = false, showRelief = false, showDataLayers = false, selectedDataLayer, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange, onDataLayersDataChange, onPinStatusChange }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
+  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction, currentPolygon } = useAnalysis();
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<string>(layer);
   const [showAttribution, setShowAttribution] = useState(false);

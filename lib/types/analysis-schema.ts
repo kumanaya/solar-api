@@ -79,6 +79,23 @@ export const AnalysisSchema = z.object({
   googleSolarData: z.any().optional(),
   technicalNote: z.string().optional(),
   
+  // Technician inputs
+  technicianInputs: z.object({
+    panel_count: z.number().nullable().optional(),
+    energy_cost_per_kwh: z.number().nullable().optional(),
+    solar_incentives: z.number().nullable().optional(),
+    installation_cost_per_watt: z.number().nullable().optional(),
+    panel_capacity_watts: z.number().nullable().optional(),
+    show_advanced_settings: z.boolean().optional(),
+    additional_details: z.string().nullable().optional(),
+    // New advanced fields
+    system_lifetime_years: z.number().nullable().optional(),
+    dc_to_ac_conversion: z.number().nullable().optional(),
+    annual_degradation_rate: z.number().nullable().optional(),
+    annual_energy_cost_increase: z.number().nullable().optional(),
+    discount_rate: z.number().nullable().optional()
+  }).optional(),
+  
   // Metadata
   createdAt: z.string().optional(),
   
