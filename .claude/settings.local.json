@@ -9,7 +9,10 @@
       "mcp__supabase__list_tables",
       "Bash(rm:*)",
       "mcp__supabase__execute_sql",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "WebSearch",
+      "WebSearch",
+      "Bash(node:*)"
     ],
     "additionalDirectories": [
       "C:\\c\\Users\\danie\\Desktop\\www\\kumanaya"

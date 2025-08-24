@@ -74,6 +74,7 @@ export function TechnicalResults() {
 
       <SystemConfigCard
         usableArea={data.usableArea}
+        technicianInputs={data.technicianInputs}
       />
 
       <SystemLifetimeCard

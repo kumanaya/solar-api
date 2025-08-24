@@ -72,6 +72,10 @@ export interface VerdictCardProps {
 
 export interface SystemConfigCardProps {
   usableArea: number;
+  technicianInputs?: {
+    panel_count?: number;
+    panel_capacity_watts?: number;
+  };
   isLocked?: boolean;
 }
 
@@ -616,13 +620,18 @@ export function VerdictCard({
 
 export function SystemConfigCard({
   usableArea,
+  technicianInputs,
   isLocked = false,
 }: SystemConfigCardProps) {
-  const maxPanels = Math.floor(usableArea / 2.5);
-  const totalPower = maxPanels * 0.55;
-  const panelPower = 550;
-  const panelArea = 2.5;
+  // CORREÇÃO: Priorizar inputs do técnico sobre cálculo automático
+  const panelPower = technicianInputs?.panel_capacity_watts || 550;
+  const specifiedPanels = technicianInputs?.panel_count;
+  const panelArea = 2.5; // Área padrão por painel 550W
   const panelEfficiency = 21.5;
+  
+  // Se técnico especificou quantidade, usar essa configuração
+  const actualPanels = specifiedPanels || Math.floor(usableArea / panelArea);
+  const totalPower = actualPanels * (panelPower / 1000); // Converter para kWp
 
   return (
     <BaseCard
@@ -637,8 +646,8 @@ export function SystemConfigCard({
           <span className="text-2xl font-bold">{totalPower.toFixed(1)}</span>
           <span className="text-sm text-muted-foreground ml-1">kWp</span>
         </div>
-        <Badge variant="outline">
-          {maxPanels} painéis
+        <Badge variant="outline" className={specifiedPanels ? "border-blue-300 text-blue-700" : ""}>
+          {actualPanels} painéis {specifiedPanels ? "(técnico)" : "(sugerido)"}
         </Badge>
       </div>
 
@@ -665,21 +674,29 @@ export function SystemConfigCard({
         <div className="flex justify-between">
           <span>Área total ocupada:</span>
           <span className="font-medium">
-            {(maxPanels * panelArea).toFixed(1)}m²
+            {(actualPanels * panelArea).toFixed(1)}m²
           </span>
         </div>
         <div className="flex justify-between">
           <span>Densidade de potência:</span>
           <span className="font-medium">
-            {((totalPower * 1000) / (maxPanels * panelArea)).toFixed(0)} W/m²
+            {((totalPower * 1000) / (actualPanels * panelArea)).toFixed(0)} W/m²
           </span>
         </div>
         <div className="flex justify-between">
           <span>Fator de ocupação:</span>
           <span className="font-medium">
-            {((maxPanels * panelArea / usableArea) * 100).toFixed(0)}%
+            {((actualPanels * panelArea / usableArea) * 100).toFixed(0)}%
           </span>
         </div>
+        {specifiedPanels && (
+          <div className="flex justify-between text-blue-700">
+            <span>Configuração do técnico:</span>
+            <span className="font-medium">
+              {specifiedPanels} × {panelPower}W
+            </span>
+          </div>
+        )}
       </div>
     </BaseCard>
   );

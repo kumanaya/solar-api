@@ -184,7 +184,11 @@ export function TechnicalPanel() {
             isLocked={true}
           />
 
-          <SystemConfigCard usableArea={cv.usableArea} isLocked={true} />
+          <SystemConfigCard 
+            usableArea={cv.usableArea} 
+            technicianInputs={cv.technicianInputs}
+            isLocked={true} 
+          />
 
           <SystemLifetimeCard
             estimatedProduction={cv.estimatedProduction}

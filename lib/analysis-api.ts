@@ -44,7 +44,7 @@ interface AnalysisResponse {
     confidence: 'Alta' | 'Média' | 'Baixa';
     usableArea: number;
     areaSource: 'google' | 'estimate' | 'footprint' | 'manual';
-    annualGHI: number;
+    annualIrradiation: number;
     irradiationSource: string;
     shadingIndex: number;
     shadingLoss: number;
@@ -85,6 +85,17 @@ interface AnalysisResponse {
     fallbackReasons?: string[];
     nasaPowerData?: object;
     pvgisData?: object;
+    financialData?: {
+      totalSystemCost: number;
+      netSystemCost: number;
+      totalSystemWatts: number;
+      annualSavings: number;
+      simplePaybackYears: number;
+      npv: number;
+      roi: number;
+      totalLifetimeSavings: number;
+      incentivesApplied: number;
+    };
   };
   error?: string;
   errorCode?: string;
@@ -216,7 +227,7 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
   if (!apiData) return null;
 
   console.log('transformAnalysisData - apiData keys:', Object.keys(apiData));
-  console.log('transformAnalysisData - annualGHI value:', apiData.annualGHI);
+  console.log('transformAnalysisData - annualIrradiation value:', apiData.annualIrradiation);
   console.log('transformAnalysisData - apiResponseTimes:', apiData.apiResponseTimes);
   console.log('transformAnalysisData - apiResponseTimes type:', typeof apiData.apiResponseTimes);
   if (apiData.apiResponseTimes) {
@@ -235,7 +246,7 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
     confidence: apiData.confidence,
     usableArea: apiData.usableArea,
     areaSource: apiData.areaSource,
-    annualIrradiation: apiData.annualGHI || 1800,
+    annualIrradiation: apiData.annualIrradiation,
     irradiationSource: apiData.irradiationSource,
     shadingIndex: apiData.shadingIndex,
     shadingLoss: apiData.shadingLoss,
@@ -272,5 +283,6 @@ export function transformAnalysisData(apiData: AnalysisResponse['data']) {
     fallbackReasons: apiData.fallbackReasons,
     nasaPowerData: apiData.nasaPowerData,
     pvgisData: apiData.pvgisData,
+    financialData: apiData.financialData,
   };
 }

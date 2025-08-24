@@ -639,6 +639,78 @@ function getModuleEfficiency(moduleType?: string): number {
   return efficiencies[moduleType ?? "monocristalino"] ?? DEFAULT_EFF;
 }
 
+// Função para calcular dados financeiros
+function calculateFinancials(params: {
+  annualProductionKwh: number;
+  energyCostPerKwh?: number | null;
+  installationCostPerWatt?: number | null;
+  solarIncentives?: number | null;
+  panelCapacityWatts?: number | null;
+  panelCount?: number | null;
+  systemLifetimeYears?: number | null;
+  annualEnergyCostIncrease?: number | null;
+  discountRate?: number | null;
+}) {
+  const {
+    annualProductionKwh,
+    energyCostPerKwh,
+    installationCostPerWatt,
+    solarIncentives,
+    panelCapacityWatts,
+    panelCount,
+    systemLifetimeYears = 25,
+    annualEnergyCostIncrease = 5.0,
+    discountRate = 6.0,
+  } = params;
+
+  if (!energyCostPerKwh || !panelCapacityWatts || !panelCount || !installationCostPerWatt) {
+    return null;
+  }
+
+  const totalSystemWatts = panelCapacityWatts * panelCount;
+  const totalSystemCost = totalSystemWatts * installationCostPerWatt;
+  
+  // Aplicar incentivos
+  const incentiveMultiplier = solarIncentives ? (1 - solarIncentives / 100) : 1;
+  const netSystemCost = totalSystemCost * incentiveMultiplier;
+
+  // Cálculo de economia anual
+  const annualSavings = annualProductionKwh * energyCostPerKwh;
+
+  // Payback simples
+  const simplePaybackYears = netSystemCost / annualSavings;
+
+  // Valor presente líquido (VPL) / NPV
+  let npv = -netSystemCost; // Investimento inicial negativo
+  const discountRateDecimal = discountRate / 100;
+  const energyIncreaseDecimal = annualEnergyCostIncrease / 100;
+
+  for (let year = 1; year <= systemLifetimeYears; year++) {
+    const yearlyEnergyCost = energyCostPerKwh * Math.pow(1 + energyIncreaseDecimal, year - 1);
+    const yearlySavings = annualProductionKwh * yearlyEnergyCost;
+    const presentValue = yearlySavings / Math.pow(1 + discountRateDecimal, year);
+    npv += presentValue;
+  }
+
+  // Taxa interna de retorno (aproximação)
+  const totalLifetimeSavings = annualSavings * systemLifetimeYears * 
+    ((1 + energyIncreaseDecimal) ** systemLifetimeYears - 1) / energyIncreaseDecimal;
+  
+  const roi = ((totalLifetimeSavings - netSystemCost) / netSystemCost) * 100;
+
+  return {
+    totalSystemCost,
+    netSystemCost,
+    totalSystemWatts,
+    annualSavings,
+    simplePaybackYears: Math.round(simplePaybackYears * 100) / 100,
+    npv: Math.round(npv),
+    roi: Math.round(roi * 100) / 100,
+    totalLifetimeSavings: Math.round(totalLifetimeSavings),
+    incentivesApplied: solarIncentives || 0,
+  };
+}
+
 // Estimativa usando GHI, PR e transposição APERFEIÇOADA!
 function estimateByGHI(params: {
   ghi_kwh_m2_year: number;
@@ -652,6 +724,11 @@ function estimateByGHI(params: {
   temperature?: number;
   system_age?: number;
   segments?: { area: number; tilt: number; az: number }[];
+  // Novos parâmetros do TechnicianInputs
+  inverter_efficiency?: number;
+  annual_degradation_rate?: number;
+  panel_capacity_watts?: number;
+  panel_count?: number;
 }) {
   const eff = params.module_eff ?? DEFAULT_EFF;
   const pr = params.pr ?? DEFAULT_PR;
@@ -674,18 +751,32 @@ function estimateByGHI(params: {
       Math.max(0, (params.temperature - STC_TEMP) * Math.abs(TEMP_COEFFICIENT))
     : 1;
   const years = params.system_age ?? 0;
-  const degradation = Math.pow(1 - ANNUAL_DEGRADATION, years);
+  const degradationRate = params.annual_degradation_rate ? (params.annual_degradation_rate / 100) : ANNUAL_DEGRADATION;
+  const degradation = Math.pow(1 - degradationRate, years);
+  
+  // Se temos dados do técnico, usar eficiência específica baseada na potência dos painéis
+  let finalEff = eff;
+  if (params.panel_capacity_watts && params.panel_count) {
+    const totalPowerKw = (params.panel_capacity_watts * params.panel_count) / 1000;
+    const areaBasedPowerKw = params.usable_area_m2 * eff * 1; // 1 kW/m² STC
+    // Ajustar eficiência baseada na relação real vs teórica
+    const efficiencyAdjustment = Math.min(totalPowerKw / Math.max(areaBasedPowerKw, 0.1), 1.5);
+    finalEff = eff * efficiencyAdjustment;
+  }
+  
   return {
     value:
       params.ghi_kwh_m2_year *
       params.usable_area_m2 *
-      eff *
+      finalEff *
       pr *
       transpositionFactor *
       shadeLoss *
       tempLoss *
       degradation,
     transpositionFactor,
+    degradationRate,
+    finalEff,
   };
 }
 
@@ -695,6 +786,7 @@ function classifyVerdict(params: {
   azimuth_deg?: number | null;
   tilt_deg?: number | null;
   is_brazil?: boolean;
+  lat?: number;
 }) {
   const reasons: string[] = [];
   const recommendations: string[] = [];
@@ -704,24 +796,77 @@ function classifyVerdict(params: {
   const az = params.azimuth_deg ?? 0;
   const tilt = params.tilt_deg ?? 15;
   const isBrazil = params.is_brazil ?? false;
+  const lat = params.lat ?? (isBrazil ? -15 : 40); // Default latitudes
+  
+  // CORREÇÃO: Orientação realista para Brasil (Norte = 0°)
   const azDev = isBrazil
     ? Math.min(Math.abs(az), Math.abs(az - 360))
     : Math.min(Math.abs(az - 180), Math.abs(az + 180));
-  const tiltOk = tilt >= 5 && tilt <= 35;
-  const shadeOk = shade < 0.2;
-  const shadeAcceptable = shade < 0.35;
-  const areaApto = area >= 20;
-  const areaMinimo = area >= 12;
-  if (areaApto && shadeOk && azDev <= 45 && tiltOk) {
-    reasons.push("Área adequada para instalação");
-    reasons.push("Baixo índice de sombreamento");
-    reasons.push("Orientação solar favorável");
+  
+  // CORREÇÃO: Inclinação baseada na latitude (NBR 16274)
+  const optimalTilt = Math.abs(lat);
+  const tiltDeviation = Math.abs(tilt - optimalTilt);
+  const maxAcceptableTilt = Math.min(45, Math.abs(lat) + 20);
+  const tiltExcellent = tilt >= 5 && tiltDeviation <= 10; // ±10° da latitude
+  const tiltAcceptable = tilt >= 5 && tilt <= maxAcceptableTilt && tiltDeviation <= 20; // ±20° da latitude
+  
+  // CORREÇÃO: Sombreamento com tecnologias modernas (2024)
+  const shadeExcellent = shade < 0.15; // 15% - excelente
+  const shadeGood = shade < 0.30;      // 30% - bom com otimizadores
+  const shadeAcceptable = shade < 0.45; // 45% - viável com microinversores modernos
+  
+  // CORREÇÃO: Área realista para mercado brasileiro 2024 (painéis 550W+)
+  const areaExcellent = area >= 20;    // 20m² - ideal para 4-6kWp
+  const areaGood = area >= 15;         // 15m² - bom para 3-4kWp
+  const areaAcceptable = area >= 12;   // 12m² - aceitável para 2-3kWp
+  const areaMinimum = area >= 8;       // 8m² - mínimo para 1,5-2kWp
+  
+  // CORREÇÃO: Orientação por qualidade
+  const orientationExcellent = azDev <= 20;  // ±20° do Norte
+  const orientationGood = azDev <= 45;       // ±45° do Norte
+  const orientationAcceptable = azDev <= 90; // Até Leste/Oeste
+  const orientationPoor = azDev > 135;       // Próximo ao Sul (evitar)
+  // CLASSIFICAÇÃO APTO: Condições excelentes a boas (mais flexível)
+  if ((areaGood || areaAcceptable) && shadeGood && orientationGood && tiltAcceptable && !orientationPoor) {
+    reasons.push(`Área ${areaExcellent ? 'excelente' : 'adequada'} para instalação (${area.toFixed(1)}m²)`);
+    
+    if (shadeExcellent) {
+      reasons.push("Excelentes condições de sombreamento");
+    } else {
+      reasons.push("Boas condições de sombreamento");
+    }
+    
+    if (orientationExcellent) {
+      reasons.push(`Orientação ideal (${az.toFixed(0)}° do Norte)`);
+    } else {
+      reasons.push(`Boa orientação solar (${az.toFixed(0)}°)`);
+    }
+    
+    if (tiltExcellent) {
+      reasons.push(`Inclinação próxima ao ideal (${tilt.toFixed(0)}° vs ${optimalTilt.toFixed(0)}° ótimo)`);
+    } else {
+      reasons.push(`Inclinação aceitável (${tilt.toFixed(0)}°)`);
+    }
+
     if (isBrazil) {
       recommendations.push("Sistema com excelente potencial de geração");
-      recommendations.push(
-        "Considerar módulos de alta eficiência para maximizar produção"
-      );
+      
+      // Recomendações atualizadas para painéis modernos 550W+ (2024)
+      if (area >= 25) {
+        recommendations.push("Considerar sistema de 5-8kWp para máximo aproveitamento");
+      } else if (area >= 20) {
+        recommendations.push("Sistema de 4-6kWp adequado para este telhado");
+      } else if (area >= 15) {
+        recommendations.push("Sistema de 3-4kWp recomendado (padrão residencial)");
+      } else if (area >= 12) {
+        recommendations.push("Sistema compacto de 2-3kWp viável");
+      }
+      
+      if (!tiltExcellent) {
+        recommendations.push(`Para máxima eficiência, ajustar inclinação para ${optimalTilt.toFixed(0)}°`);
+      }
     }
+    
     return {
       verdict: "Apto" as const,
       reasons,
@@ -729,28 +874,63 @@ function classifyVerdict(params: {
       warnings: warnings.length ? warnings : undefined,
     };
   }
-  if (areaMinimo && shadeAcceptable && (azDev <= 90 || tiltOk)) {
-    if (area < 20) {
-      reasons.push("Área no limite mínimo recomendado");
-      recommendations.push("Utilizar módulos de alta eficiência");
+  // CLASSIFICAÇÃO PARCIAL: Condições com limitações mas comercialmente viáveis
+  if (areaMinimum && shadeAcceptable && orientationAcceptable && !orientationPoor) {
+    if (areaMinimum && !areaAcceptable) {
+      reasons.push(`Área no limite mínimo viável (${area.toFixed(1)}m² - mín. 8m²)`);
+      recommendations.push("Sistema compacto de 1,5-2kWp recomendado");
+      recommendations.push("Utilizar módulos de alta eficiência (550W+) para maximizar geração");
+      if (area >= 10) {
+        recommendations.push("Considerar expansão futura se área adicional disponível");
+      }
+    } else if (areaAcceptable && !areaGood) {
+      reasons.push(`Área adequada para sistema médio (${area.toFixed(1)}m²)`);
+      recommendations.push("Sistema de 2-3kWp adequado para este telhado");
     }
-    if (!shadeOk && shade < 0.35) {
-      reasons.push("Sombreamento moderado presente");
-      recommendations.push("Realizar análise detalhada de sombreamento");
-      recommendations.push(
-        "Considerar otimizadores de potência ou microinversores"
-      );
+    
+    if (!shadeGood && shadeAcceptable) {
+      const lossPercent = (shade * 100).toFixed(0);
+      reasons.push(`Sombreamento moderado presente (${lossPercent}% de perdas)`);
+      
+      if (shade <= 0.35) {
+        recommendations.push("Considerar otimizadores de potência para compensar sombreamento");
+      } else {
+        recommendations.push("Microinversores recomendados para sombreamento alto");
+        recommendations.push("Análise detalhada de sombreamento necessária");
+      }
+      
+      if (shade > 0.40) {
+        warnings.push("Sombreamento alto - viabilidade depende de tecnologias modernas");
+      } else if (shade > 0.35) {
+        warnings.push("Considerar remoção de obstáculos se economicamente viável");
+      }
     }
-    if (!tiltOk) {
-      reasons.push(`Inclinação de ${tilt}° fora do ideal`);
-      recommendations.push(
-        `Ajustar inclinação para ${isBrazil ? "15-25°" : "30-40°"}`
-      );
+    
+    if (!tiltAcceptable) {
+      const deviation = Math.abs(tilt - optimalTilt);
+      reasons.push(`Inclinação subótima (${tilt.toFixed(0)}° vs ${optimalTilt.toFixed(0)}° ideal - desvio ${deviation.toFixed(0)}°)`);
+      recommendations.push(`Ajustar inclinação para ${optimalTilt.toFixed(0)}° se possível`);
     }
-    if (azDev > 45) {
-      reasons.push("Orientação parcialmente favorável");
-      warnings.push("Produção pode ser 5-15% menor que o ideal");
+    
+    if (orientationAcceptable && !orientationGood) {
+      const lossPercent = azDev > 90 ? "15-20" : "8-15";
+      reasons.push(`Orientação com perdas direcionais (${az.toFixed(0)}°)`);
+      warnings.push(`Produção ${lossPercent}% menor que orientação Norte ideal`);
+      
+      if (azDev > 90) {
+        recommendations.push("Considerar correção de orientação se estruturalmente viável");
+      }
     }
+
+    // Avisos específicos para combinações problemáticas
+    if (!areaGood && !shadeGood) {
+      warnings.push("Área reduzida + sombreamento moderado - avaliar viabilidade econômica");
+    }
+    
+    if (areaMinimum && !areaAcceptable && shade > 0.35) {
+      warnings.push("Área muito pequena + sombreamento alto - considerar alternativas");
+    }
+    
     return {
       verdict: "Parcial" as const,
       reasons: reasons.length ? reasons : ["Condições parcialmente favoráveis"],
@@ -758,28 +938,81 @@ function classifyVerdict(params: {
       warnings: warnings.length ? warnings : undefined,
     };
   }
-  if (area < 12) {
-    reasons.push("Área insuficiente para instalação viável");
-    warnings.push("Mínimo recomendado: 12m² úteis");
+  // CLASSIFICAÇÃO NÃO APTO: Condições impeditivas para instalação
+  
+  // Área insuficiente (< 8m²)  
+  if (!areaMinimum) {
+    reasons.push(`Área insuficiente para instalação viável (${area.toFixed(1)}m²)`);
+    warnings.push("Mínimo recomendado: 8m² para sistema básico de 1,5kWp");
+    
+    if (area >= 6) {
+      recommendations.push("Buscar área adicional no telhado ou considerar painéis mais eficientes");
+      recommendations.push("Avaliar instalação em múltiplas águas do telhado");
+    } else if (area >= 4) {
+      recommendations.push("Área muito reduzida - considerar outras alternativas energéticas");
+    }
   }
-  if (shade >= 0.35) {
-    reasons.push("Sombreamento excessivo detectado");
-    warnings.push("Perdas por sombreamento superiores a 35%");
+  
+  // Sombreamento excessivo (≥45%)
+  if (!shadeAcceptable) {
+    const lossPercent = (shade * 100).toFixed(0);
+    reasons.push(`Sombreamento excessivo detectado (${lossPercent}% de perdas)`);
+    warnings.push("Perdas por sombreamento inviabilizam economicamente o sistema");
+    
+    if (shade < 0.55) {
+      recommendations.push("Considerar remoção de obstáculos causadores de sombra");
+      recommendations.push("Avaliar tecnologias avançadas (microinversores + painéis bifaciais)");
+      recommendations.push("Análise de viabilidade financeira específica necessária");
+    } else if (shade < 0.70) {
+      recommendations.push("Buscar área alternativa com menor sombreamento");
+      recommendations.push("Considerar sistemas elevados ou estruturas especiais");
+    } else {
+      recommendations.push("Localização inadequada para energia solar fotovoltaica");
+    }
   }
-  if (azDev > 90) {
-    reasons.push("Orientação desfavorável");
+  
+  // Orientação desfavorável (próximo ao Sul)
+  if (orientationPoor) {
+    const direction = isBrazil ? "Sul" : "Norte";
+    reasons.push(`Orientação desfavorável - face voltada para ${direction}`);
     warnings.push(
-      isBrazil
-        ? "Face voltada predominantemente para Sul"
-        : "Face voltada predominantemente para Norte"
+      `Perdas direcionais superiores a 30% tornam instalação inviável`
     );
+    if (azDev < 160) {
+      recommendations.push("Considerar correção de orientação se estruturalmente possível");
+    } else {
+      recommendations.push("Buscar face alternativa do telhado voltada para Norte");
+    }
   }
+  
+  // Inclinação extremamente inadequada
+  if (tilt > maxAcceptableTilt) {
+    reasons.push(`Inclinação excessiva (${tilt.toFixed(0)}° - máx. aceitável: ${maxAcceptableTilt.toFixed(0)}°)`);
+    warnings.push("Inclinação compromete segurança e eficiência da instalação");
+    recommendations.push("Ajustar estrutura de suporte para inclinação adequada");
+  } else if (tilt < 5) {
+    reasons.push(`Inclinação insuficiente (${tilt.toFixed(0)}° - mín. recomendado: 5°)`);
+    warnings.push("Inclinação baixa compromete limpeza natural e eficiência");
+    recommendations.push("Ajustar inclinação mínima para 5° ou mais");
+  }
+  
+  // Combinações críticas
+  if (!areaMinimum && !shadeAcceptable) {
+    warnings.push("Área reduzida + sombreamento alto = instalação totalmente inviável");
+  }
+  
+  if (orientationPoor && !shadeAcceptable) {
+    warnings.push("Orientação Sul + sombreamento alto = condições críticas");
+  }
+  
   return {
     verdict: "Não apto" as const,
     reasons: reasons.length
       ? reasons
       : ["Condições desfavoráveis para instalação"],
-    recommendations: ["Buscar localização alternativa para instalação"],
+    recommendations: recommendations.length 
+      ? recommendations 
+      : ["Buscar localização alternativa para instalação"],
     warnings: warnings.length ? warnings : undefined,
   };
 }
@@ -1158,14 +1391,21 @@ async function processGoogleSolarData(
       temperature: temperature,
       system_age: age,
       segments,
+      // Parâmetros do TechnicianInputs
+      inverter_efficiency: technicianInputs?.dc_to_ac_conversion,
+      annual_degradation_rate: technicianInputs?.annual_degradation_rate,
+      panel_capacity_watts: technicianInputs?.panel_capacity_watts,
+      panel_count: technicianInputs?.panel_count,
     });
     estimatedProduction = Math.round(result.value);
     transpositionFactor = result.transpositionFactor;
     estimatedProductionAC = estimatedProduction;
-    estimatedProductionDC = Math.round(estimatedProductionAC / INVERTER_EFF);
+    const inverterEff = technicianInputs?.dc_to_ac_conversion || INVERTER_EFF;
+    estimatedProductionDC = Math.round(estimatedProductionAC / inverterEff);
     estimatedProductionYear1 = estimatedProductionAC;
+    const degradationRate = result.degradationRate || ANNUAL_DEGRADATION;
     estimatedProductionYear25 = Math.floor(
-      estimatedProductionAC * Math.pow(1 - ANNUAL_DEGRADATION, 25)
+      estimatedProductionAC * Math.pow(1 - degradationRate, 25)
     );
   }
 
@@ -1180,6 +1420,7 @@ async function processGoogleSolarData(
     azimuth_deg: avgAz,
     tilt_deg: avgTilt,
     is_brazil: isBrazil,
+    lat: lat,
   });
 
   // --- FOOTPRINTS ---
@@ -1213,12 +1454,25 @@ async function processGoogleSolarData(
   if (polygon?.source === "microsoft-footprint")
     technicalNote += "Footprint: Microsoft Building Footprints (ML). ";
 
+  // Cálculos financeiros
+  const financialData = calculateFinancials({
+    annualProductionKwh: estimatedProductionAC,
+    energyCostPerKwh: technicianInputs?.energy_cost_per_kwh,
+    installationCostPerWatt: technicianInputs?.installation_cost_per_watt,
+    solarIncentives: technicianInputs?.solar_incentives,
+    panelCapacityWatts: technicianInputs?.panel_capacity_watts,
+    panelCount: technicianInputs?.panel_count,
+    systemLifetimeYears: technicianInputs?.system_lifetime_years,
+    annualEnergyCostIncrease: technicianInputs?.annual_energy_cost_increase,
+    discountRate: technicianInputs?.discount_rate,
+  });
+
   const derived = {
     avgAz,
     avgTilt,
     estimatedProductionDC,
     estimatedProductionAC,
-    inverterEff: INVERTER_EFF,
+    inverterEff: technicianInputs?.dc_to_ac_conversion || INVERTER_EFF,
     moduleEff,
     temperature,
     transpositionFactor,
@@ -1232,6 +1486,7 @@ async function processGoogleSolarData(
     solarPanelConfigs: sp.solarPanelConfigs,
     wholeRoofStats: sp.wholeRoofStats,
     roofSegmentStats: sp.roofSegmentStats,
+    financialData,
   };
 
   return {
@@ -1494,17 +1749,24 @@ async function processFallbackAnalysis({
     lat,
     temperature,
     system_age: age,
+    // Parâmetros do TechnicianInputs
+    inverter_efficiency: technicianInputs?.dc_to_ac_conversion,
+    annual_degradation_rate: technicianInputs?.annual_degradation_rate,
+    panel_capacity_watts: technicianInputs?.panel_capacity_watts,
+    panel_count: technicianInputs?.panel_count,
   });
 
   const estimatedProduction = Math.round(result.value);
   const transpositionFactor = result.transpositionFactor;
   const estimatedProductionAC = estimatedProduction;
+  const inverterEff = technicianInputs?.dc_to_ac_conversion || INVERTER_EFF;
   const estimatedProductionDC = Math.round(
-    estimatedProductionAC / INVERTER_EFF
+    estimatedProductionAC / inverterEff
   );
   const estimatedProductionYear1 = estimatedProductionAC;
+  const degradationRate = result.degradationRate || ANNUAL_DEGRADATION;
   const estimatedProductionYear25 = Math.floor(
-    estimatedProductionAC * Math.pow(1 - ANNUAL_DEGRADATION, 25)
+    estimatedProductionAC * Math.pow(1 - degradationRate, 25)
   );
 
   const temperatureLosses = Math.round(
@@ -1517,6 +1779,7 @@ async function processFallbackAnalysis({
     azimuth_deg: avgAz,
     tilt_deg: avgTilt,
     is_brazil: isBrazil,
+    lat: lat,
   });
 
   const footprints = [];
@@ -1548,6 +1811,19 @@ async function processFallbackAnalysis({
   if (polygon?.source === "microsoft-footprint")
     technicalNote += "Footprint: Microsoft Building Footprints (ML). ";
 
+  // Cálculos financeiros
+  const financialData = calculateFinancials({
+    annualProductionKwh: estimatedProductionAC,
+    energyCostPerKwh: technicianInputs?.energy_cost_per_kwh,
+    installationCostPerWatt: technicianInputs?.installation_cost_per_watt,
+    solarIncentives: technicianInputs?.solar_incentives,
+    panelCapacityWatts: technicianInputs?.panel_capacity_watts,
+    panelCount: technicianInputs?.panel_count,
+    systemLifetimeYears: technicianInputs?.system_lifetime_years,
+    annualEnergyCostIncrease: technicianInputs?.annual_energy_cost_increase,
+    discountRate: technicianInputs?.discount_rate,
+  });
+
   return {
     address,
     coordinates: { lat, lng },
@@ -1567,7 +1843,7 @@ async function processFallbackAnalysis({
     estimatedProductionYear1,
     estimatedProductionYear25,
     temperatureLosses,
-    degradationFactor: Number(Math.pow(1 - ANNUAL_DEGRADATION, 25).toFixed(3)),
+    degradationFactor: Number(Math.pow(1 - degradationRate, 25).toFixed(3)),
     effectivePR: Number(effectivePR.toFixed(3)),
     transpositionFactor: Number(transpositionFactor.toFixed(3)),
     verdict: cls.verdict,
@@ -1576,6 +1852,7 @@ async function processFallbackAnalysis({
     warnings: cls.warnings,
     footprints,
     technicalNote,
+    financialData,
     // API tracking data
     apiSourcesUsed: apiTracker.sourcesUsed,
     apiResponseTimes: apiTracker.responseTimes,
