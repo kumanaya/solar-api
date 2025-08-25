@@ -3,7 +3,6 @@
 import { CoverageStatus } from "./coverage-status";
 import { TechnicalResults } from "./technical-results";
 import { ActionButtons } from "./action-buttons";
-import { TechnicianInputsPanel } from "./technician-inputs-panel";
 import { useAnalysis } from "./analysis-context";
 import { AlertCircle } from "lucide-react";
 import { useErrorHandler } from "@/lib/hooks/use-error-handler";
@@ -14,7 +13,7 @@ interface ResultsPanelProps {
 }
 
 export function ResultsPanel({ mapRef }: ResultsPanelProps) {
-  const { data, error, hasCredits, selectedAddress, hasAnalysisResults } = useAnalysis();
+  const { data, error, hasCredits, selectedAddress, hasAnalysisResults, currentPolygon } = useAnalysis();
   
   const { } = useErrorHandler();
   
@@ -112,19 +111,15 @@ export function ResultsPanel({ mapRef }: ResultsPanelProps) {
         {/* Status de cobertura */}
         <CoverageStatus />
 
-        {/* Inputs do técnico - aparece quando há endereço selecionado */}
-        {selectedAddress && !hasAnalysisResults && (
-          <TechnicianInputsPanel />
-        )}
 
         {/* Resultados técnicos */}
         <TechnicalResults />
         
-        {/* Mensagem quando não há endereço selecionado */}
-        {!selectedAddress && (
+        {/* Mensagem quando não há endereço nem polígono */}
+        {!selectedAddress && !currentPolygon && (
           <div className="bg-muted/50 border border-border rounded-lg p-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Digite um endereço acima para iniciar a análise
+              Digite um endereço ou desenhe um polígono no mapa para iniciar a análise
             </p>
           </div>
         )}
@@ -132,7 +127,7 @@ export function ResultsPanel({ mapRef }: ResultsPanelProps) {
       </div>
 
       {/* Ações */}
-      {data.coordinates && (
+      {(data.coordinates || currentPolygon) && (
         <div className="border-t p-4">
           <ActionButtons mapRef={mapRef} />
         </div>
