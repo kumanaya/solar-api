@@ -134,12 +134,12 @@ export function TechnicianInputsPanel({
         <CardTitle className="flex items-center gap-2">
           <Calculator className="h-5 w-5 text-blue-600" />
           Dados do Técnico
-          {!isLocked && (
-            <span className="text-sm font-normal text-muted-foreground">
-              • Configure os parâmetros para cálculo personalizado
-            </span>
-          )}
         </CardTitle>
+        {!isLocked && (
+          <p className="text-sm text-muted-foreground">
+            Configure os parâmetros para cálculo personalizado
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         {/* System Configuration */}

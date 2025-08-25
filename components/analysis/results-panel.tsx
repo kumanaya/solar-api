@@ -13,7 +13,7 @@ interface ResultsPanelProps {
 }
 
 export function ResultsPanel({ mapRef }: ResultsPanelProps) {
-  const { data, error, hasCredits, selectedAddress, hasAnalysisResults, currentPolygon } = useAnalysis();
+  const { data, error, hasCredits, selectedAddress, currentPolygon } = useAnalysis();
   
   const { } = useErrorHandler();
   
