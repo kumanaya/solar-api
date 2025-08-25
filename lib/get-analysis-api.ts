@@ -70,6 +70,17 @@ interface GetAnalysisResponse {
       annual_energy_cost_increase?: number | null;
       discount_rate?: number | null;
     };
+    marginOfError?: string;
+    suggestedSystemConfig?: {
+      panel_count: number;
+      system_power_kwp: number;
+      panel_power_watts: number;
+      panel_area_m2: number;
+      module_efficiency_percent: number;
+      occupied_area_m2: number;
+      power_density_w_m2: number;
+      area_utilization_percent: number;
+    };
     createdAt: string;
   };
   error?: string;
@@ -216,6 +227,17 @@ export function transformGetAnalysisData(apiData: GetAnalysisResponse['data']) {
     technicalNote: apiData.technicalNote,
     imageryMetadata: apiData.imageryMetadata,
     technicianInputs: apiData.technicianInputs,
+    marginOfError: apiData.marginOfError || "±5%",
+    suggestedSystemConfig: apiData.suggestedSystemConfig || {
+      panel_count: 0,
+      system_power_kwp: 0,
+      panel_power_watts: 550,
+      panel_area_m2: 2.5,
+      module_efficiency_percent: 21.5,
+      occupied_area_m2: 0,
+      power_density_w_m2: 0,
+      area_utilization_percent: 0
+    },
     createdAt: apiData.createdAt
   };
 }

@@ -132,14 +132,15 @@ Deno.serve(async (req: Request) => {
       }
     });
     
-    const { data: analysis, error } = await supabase
-      .from('analyses')
+    // Query the new architecture tables
+    const { data: analysisResult, error: resultError } = await supabase
+      .from('analysis_results')
       .select('*')
       .eq('id', input.id)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
+    if (resultError) {
+      if (resultError.code === 'PGRST116') {
         return new Response(JSON.stringify({ success: false, error: "Analysis not found" }), {
           status: 404,
           headers: { ...headers, "Content-Type": "application/json" },
@@ -151,43 +152,98 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    // Corrigido: anualIrradiation é número, retrocompatível com annual_ghi (string ou number)
+    // Get the most recent adjustments for this analysis (if any)
+    const { data: adjustments, error: adjustError } = await supabase
+      .from('analysis_adjustments')
+      .select('*')
+      .eq('analysis_id', input.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    // Combine data from analysis_results and analysis_adjustments
+    const latestAdjustment = adjustments && adjustments.length > 0 ? adjustments[0] : null;
+    
+    // Build response from analysis_results with potential adjustments
     const transformedAnalysis = {
-      id: analysis.id,
-      address: analysis.address,
-      coordinates: analysis.coordinates,
-      coverage: analysis.coverage,
-      confidence: analysis.confidence,
-      usableArea: Number(analysis.usable_area),
-      areaSource: analysis.area_source,
-      usageFactor: Number(analysis.usage_factor),
-      annualIrradiation: Number(
-        analysis.annual_irradiation ??
-        analysis.annual_ghi ??
-        0 // fallback seguro
-      ),
-      irradiationSource: analysis.irradiation_source,
-      shadingIndex: Number(analysis.shading_index),
-      shadingLoss: Number(analysis.shading_loss),
-      shadingSource: analysis.shading_source,
-      estimatedProduction: Number(analysis.estimated_production),
-      estimatedProductionAC: Number(analysis.estimated_production_ac),
-      estimatedProductionDC: Number(analysis.estimated_production_dc),
-      estimatedProductionYear1: Number(analysis.estimated_production_year1),
-      estimatedProductionYear25: Number(analysis.estimated_production_year25),
-      temperatureLosses: Number(analysis.temperature_losses),
-      degradationFactor: Number(analysis.degradation_factor),
-      effectivePR: Number(analysis.effective_pr),
-      verdict: analysis.verdict,
-      reasons: analysis.reasons,
-      recommendations: analysis.recommendations,
-      warnings: analysis.warnings,
-      footprints: analysis.footprints,
-      googleSolarData: analysis.google_solar_data,
-      technicalNote: analysis.technical_note,
-      technicianInputs: analysis.technician_inputs,
-      createdAt: analysis.created_at,
-      updatedAt: analysis.updated_at
+      id: analysisResult.id,
+      address: `Análise ${analysisResult.id.slice(0, 8)}`, // Generic address since we don't store it in new architecture
+      coordinates: {
+        lat: Number(analysisResult.lat),
+        lng: Number(analysisResult.lng)
+      },
+      coverage: {
+        google: latestAdjustment?.metadata ? 
+          JSON.parse(latestAdjustment.metadata).coverage?.google || false : 
+          false,
+        fallback: "Usando dados NASA SRTM"
+      },
+      confidence: "Média", // Default confidence
+      usableArea: Number(latestAdjustment?.usable_area || analysisResult.usable_area),
+      areaSource: latestAdjustment?.area_source || analysisResult.area_source,
+      usageFactor: 0.8, // Default usage factor
+      annualIrradiation: Number(latestAdjustment?.annual_irradiation || analysisResult.annual_irradiation),
+      irradiationSource: latestAdjustment?.irradiation_source || analysisResult.irradiation_source,
+      shadingIndex: Number(latestAdjustment?.shading_index || analysisResult.shading_index),
+      shadingLoss: Math.round((latestAdjustment?.shading_index || analysisResult.shading_index) * 100),
+      shadingSource: "heuristic", // Default shading source
+      estimatedProduction: Number(latestAdjustment?.estimated_production || analysisResult.estimated_production),
+      estimatedProductionAC: Number(latestAdjustment?.estimated_production || analysisResult.estimated_production),
+      estimatedProductionDC: Number((latestAdjustment?.estimated_production || analysisResult.estimated_production) * 1.05),
+      estimatedProductionYear1: Number(latestAdjustment?.estimated_production || analysisResult.estimated_production),
+      estimatedProductionYear25: Number((latestAdjustment?.estimated_production || analysisResult.estimated_production) * 0.85),
+      temperatureLosses: Number(analysisResult.temperature_losses || 5),
+      degradationFactor: Number(analysisResult.degradation_factor || 0.995),
+      effectivePR: Number(analysisResult.effective_pr || 0.8),
+      verdict: latestAdjustment?.verdict || analysisResult.verdict,
+      reasons: latestAdjustment?.metadata ? 
+        JSON.parse(latestAdjustment.metadata).reasons || [] : 
+        [],
+      recommendations: latestAdjustment?.metadata ? 
+        JSON.parse(latestAdjustment.metadata).recommendations || [] : 
+        [],
+      warnings: latestAdjustment?.metadata ? 
+        JSON.parse(latestAdjustment.metadata).warnings || [] : 
+        [],
+      footprints: [], // Footprints not stored in new architecture
+      googleSolarData: null, // Not stored in new architecture
+      technicalNote: latestAdjustment?.additional_details || "Análise gerada pela nova arquitetura",
+      technicianInputs: latestAdjustment ? {
+        panel_count: latestAdjustment.panel_count,
+        energy_cost_per_kwh: latestAdjustment.energy_cost_per_kwh,
+        solar_incentives: latestAdjustment.solar_incentives,
+        installation_cost_per_watt: latestAdjustment.installation_cost_per_watt,
+        panel_capacity_watts: latestAdjustment.panel_capacity_watts,
+        show_advanced_settings: false,
+        additional_details: latestAdjustment.additional_details,
+        system_lifetime_years: latestAdjustment.system_lifetime_years,
+        dc_to_ac_conversion: 0.96,
+        annual_degradation_rate: latestAdjustment.annual_degradation_rate,
+        annual_energy_cost_increase: latestAdjustment.annual_energy_cost_increase,
+        discount_rate: latestAdjustment.discount_rate
+      } : null,
+      marginOfError: latestAdjustment?.margin_of_error || analysisResult.margin_of_error || "±5%",
+      suggestedSystemConfig: latestAdjustment ? {
+        panel_count: latestAdjustment.suggested_panel_count || 0,
+        system_power_kwp: (latestAdjustment.suggested_panel_count || 0) * (latestAdjustment.suggested_panel_power_watts || 550) / 1000,
+        panel_power_watts: latestAdjustment.suggested_panel_power_watts || 550,
+        panel_area_m2: latestAdjustment.suggested_panel_area_m2 || 2.5,
+        module_efficiency_percent: latestAdjustment.suggested_module_efficiency_percent || 21.5,
+        occupied_area_m2: latestAdjustment.suggested_occupied_area_m2 || 0,
+        power_density_w_m2: latestAdjustment.suggested_power_density_w_m2 || 0,
+        area_utilization_percent: latestAdjustment.suggested_area_utilization_percent || 0
+      } : {
+        panel_count: 0,
+        system_power_kwp: 0,
+        panel_power_watts: 550,
+        panel_area_m2: 2.5,
+        module_efficiency_percent: 21.5,
+        occupied_area_m2: 0,
+        power_density_w_m2: 0,
+        area_utilization_percent: 0
+      },
+      createdAt: analysisResult.created_at,
+      updatedAt: analysisResult.updated_at
     };
 
     return new Response(JSON.stringify({ success: true, data: transformedAnalysis }), {

@@ -13,7 +13,6 @@ import {
   SystemConfigCard,
   SystemLifetimeCard,
   ConfidenceCard,
-  TechnicalDetailsCard,
   RecommendationsCard,
   WarningsCard,
   TechnicianInputsCard,
@@ -118,7 +117,7 @@ export function TechnicalPanel() {
                     {analysis.coverage.dataQuality === "measured" ? "Medida" : "Estimativa"}
                   </Badge>
                 </div>
-                {cv.areaSource !== "google" && (
+                {cv.areaSource !== "google" && cv.marginOfError && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Margem de erro estimada:</span>
                     <Badge variant="outline" className="text-xs">{cv.marginOfError}</Badge>
@@ -140,13 +139,11 @@ export function TechnicalPanel() {
 
           <AreaCard
             usableArea={cv.usableArea}
-            areaSource={
-              cv.areaSource || analysis.footprints?.[0]?.source || "manual"
-            }
+            areaSource={cv.areaSource || "manual"}
             footprints={analysis.footprints}
             usageFactor={cv.usageFactor}
             isLocked={true}
-            marginOfError={cv.marginOfError}
+            marginOfError={cv.marginOfError || "±5%"}
           />
 
           <IrradiationCard
@@ -173,18 +170,6 @@ export function TechnicalPanel() {
             showDetails={true}
           />
 
-          <TechnicalDetailsCard
-            estimatedProductionAC={cv.estimatedProductionAC || 0}
-            estimatedProductionDC={cv.estimatedProductionDC || 0}
-            estimatedProductionYear1={cv.estimatedProductionYear1 || 0}
-            estimatedProductionYear25={cv.estimatedProductionYear25 || 0}
-            temperatureLosses={cv.temperatureLosses || 0}
-            degradationFactor={cv.degradationFactor || 0}
-            effectivePR={cv.effectivePR || 0}
-            temperature={cv.temperature}
-            moduleEff={cv.moduleEff}
-            isLocked={true}
-          />
 
           <SystemConfigCard 
             usableArea={cv.usableArea} 
@@ -192,7 +177,16 @@ export function TechnicalPanel() {
               panel_count: analysis.technicianInputs.panel_count ?? undefined,
               panel_capacity_watts: analysis.technicianInputs.panel_capacity_watts ?? undefined,
             } : undefined}
-            suggestedSystemConfig={analysis.suggestedSystemConfig}
+            suggestedSystemConfig={analysis.suggestedSystemConfig || {
+              panel_count: 0,
+              system_power_kwp: 0,
+              panel_power_watts: 550,
+              panel_area_m2: 2.5,
+              module_efficiency_percent: 21.5,
+              occupied_area_m2: 0,
+              power_density_w_m2: 0,
+              area_utilization_percent: 0
+            }}
             isLocked={true} 
           />
 

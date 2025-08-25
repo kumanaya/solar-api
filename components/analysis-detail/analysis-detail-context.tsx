@@ -14,6 +14,7 @@ export interface AnalysisVersion extends BaseAnalysisVersion {
     tiltEstimated?: number;
   };
   variationFromPrevious?: number;
+  marginOfError?: string;
 }
 
 export interface DetailedAnalysis extends BaseDetailedAnalysis {
@@ -34,6 +35,16 @@ export interface DetailedAnalysis extends BaseDetailedAnalysis {
     google: boolean;
   };
   reprocessCount: number;
+  suggestedSystemConfig?: {
+    panel_count: number;
+    system_power_kwp: number;
+    panel_power_watts: number;
+    panel_area_m2: number;
+    module_efficiency_percent: number;
+    occupied_area_m2: number;
+    power_density_w_m2: number;
+    area_utilization_percent: number;
+  };
 }
 
 interface AnalysisDetailContextType {
@@ -79,10 +90,11 @@ const transformApiDataToDetailedAnalysis = (apiData: ReturnType<typeof transform
     degradationFactor: apiData.degradationFactor,
     effectivePR: apiData.effectivePR,
     irradiationSource: apiData.irradiationSource,
-    areaSource: "manual",
+    areaSource: apiData.areaSource,
     usageFactor: apiData.usageFactor,
     temperature: undefined,
-    moduleEff: undefined
+    moduleEff: undefined,
+    marginOfError: apiData.marginOfError
   };
 
   // For now, history contains only the current version
@@ -122,7 +134,10 @@ const transformApiDataToDetailedAnalysis = (apiData: ReturnType<typeof transform
         reprocessCount: 0, // TODO: Implement reprocess count in database
         technicalNote: apiData.technicalNote,
         reasons: apiData.reasons,
-        technicianInputs: apiData.technicianInputs
+        recommendations: apiData.recommendations,
+        warnings: apiData.warnings,
+        technicianInputs: apiData.technicianInputs,
+        suggestedSystemConfig: apiData.suggestedSystemConfig
       };
 };
 
