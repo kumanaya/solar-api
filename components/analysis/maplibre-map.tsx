@@ -86,6 +86,9 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
   const drawingCoordinatesRef = useRef<[number, number][]>([]);
   
+  // Track previous coordinates to avoid unnecessary flyTo calls
+  const prevCoordinatesRef = useRef<[number, number] | null>(null);
+  
   // Keep ref in sync with state
   useEffect(() => {
     drawingCoordinatesRef.current = drawingCoordinates;
@@ -312,12 +315,16 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       return;
     }
     
-    // Skip if coordinates are the same as current data
-    if (data.coordinates && Array.isArray(data.coordinates) && data.coordinates[0] === lng && data.coordinates[1] === lat) {
+    // Skip if coordinates are the same as previous coordinates
+    const prevCoords = prevCoordinatesRef.current;
+    if (prevCoords && prevCoords[0] === lng && prevCoords[1] === lat) {
       return;
     }
     
     console.log('Navigation effect triggered - flying to:', [lng, lat]);
+    
+    // Update the previous coordinates reference
+    prevCoordinatesRef.current = [lng, lat];
     
     // Fly to the location
     map.current.flyTo({
