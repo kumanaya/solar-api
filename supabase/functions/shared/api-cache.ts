@@ -85,7 +85,7 @@ export async function getGoogleSolarData(
       throw new Error('Google Maps API key not configured');
     }
     
-    const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=MEDIUM&key=${apiKey}`;
+    const url = `https://solar.googleapis.com/v1/buildingInsights:findClosest?location.latitude=${lat}&location.longitude=${lng}&requiredQuality=LOW&key=${apiKey}`;
     
     const startTime = Date.now();
     const response = await fetch(url);
@@ -94,6 +94,13 @@ export async function getGoogleSolarData(
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Google Solar API error:', response.status, errorText);
+      
+      // Provide more specific error message for 404 (no coverage)
+      let errorMessage = `Google Solar API error: ${response.status}`;
+      if (response.status === 404) {
+        errorMessage = `Google Solar não tem cobertura disponível para esta localização`;
+        console.log(`ℹ️ Google Solar coverage not available for: ${lat}, ${lng}`);
+      }
       
       // Cache the error to avoid repeated failed calls
       await supabase.from('google_solar_cache').insert({
@@ -108,7 +115,7 @@ export async function getGoogleSolarData(
       
       return {
         success: false,
-        error: `Google Solar API error: ${response.status}`,
+        error: errorMessage,
         fromCache: false
       };
     }

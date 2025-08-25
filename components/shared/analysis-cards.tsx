@@ -1553,8 +1553,10 @@ export function ImageryInfoCard({
   
   // Check if we have Google Solar imagery metadata from the database
   const imageryMetadata = data?.imageryMetadata;
-  const hasGoogleData = imageryMetadata?.imageryDate || imageryMetadata?.imageryProcessedDate || 
-    googleSolarData?.imageryDate || googleSolarData?.imageryProcessedDate;
+  // Only show Google Solar section if we actually used Google Solar API (check coverage.google)
+  const hasGoogleData = data?.coverage?.google && 
+    (imageryMetadata?.imageryDate || imageryMetadata?.imageryProcessedDate || 
+    googleSolarData?.imageryDate || googleSolarData?.imageryProcessedDate);
   
   // Always fetch Esri data to show map imagery info (independent of Google Solar data)
   const shouldFetchEsri = !esriImageryData && !isLoadingEsri;
@@ -1640,9 +1642,10 @@ export function ImageryInfoCard({
   }
 
   // Use data from imageryMetadata (database) or fallback to googleSolarData prop
-  const imageryDate = imageryMetadata?.imageryDate || googleSolarData?.imageryDate;
-  const imageryProcessedDate = imageryMetadata?.imageryProcessedDate || googleSolarData?.imageryProcessedDate;
-  const imageryQuality = imageryMetadata?.imageryQuality || googleSolarData?.imageryQuality;
+  // Only use if we actually have Google Solar coverage and valid dates
+  const imageryDate = (data?.coverage?.google && (imageryMetadata?.imageryDate || googleSolarData?.imageryDate)) || null;
+  const imageryProcessedDate = (data?.coverage?.google && (imageryMetadata?.imageryProcessedDate || googleSolarData?.imageryProcessedDate)) || null;
+  const imageryQuality = (data?.coverage?.google && (imageryMetadata?.imageryQuality || googleSolarData?.imageryQuality)) || null;
 
   const formatDate = (dateObj: { year: number; month: number; day: number }): string => {
     const date = new Date(dateObj.year, dateObj.month - 1, dateObj.day);
