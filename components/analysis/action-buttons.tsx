@@ -341,11 +341,9 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
       // Preserve current coordinates and other existing data
       const currentCoordinates = data.coordinates;
       updateData({
-        ...data, // Preserve existing data
-        ...transformedData,
+        ...transformedData, // Apply new analysis data first
         coordinates: currentCoordinates, // Keep user's pin location
-        address: selectedAddress || data.address, // Keep selected address
-        areaSource: (transformedData.areaSource as "google" | "footprint" | "manual" | "estimate") || "manual" // Ensure valid type
+        address: selectedAddress || transformedData.address || data.address // Keep selected address
       });
       
       // Mark that we have analysis results to show the technical results

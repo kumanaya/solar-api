@@ -15,7 +15,9 @@
       "Bash(node:*)",
       "mcp__supabase__deploy_edge_function",
       "Bash(npm run build:*)",
-      "Bash(npm run lint:*)"
+      "Bash(npm run lint:*)",
+      "mcp__supabase__get_logs",
+      "mcp__supabase__list_migrations"
     ],
     "additionalDirectories": [
       "C:\\c\\Users\\danie\\Desktop\\www\\kumanaya"

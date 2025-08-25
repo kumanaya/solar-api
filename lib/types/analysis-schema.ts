@@ -3,7 +3,7 @@ import { z } from "zod";
 // Enums
 export const ConfidenceLevelEnum = z.enum(["Alta", "Média", "Baixa"]);
 export const VerdictEnum = z.enum(["Apto", "Parcial", "Não apto"]);
-export const AreaSourceEnum = z.enum(["google", "footprint", "manual", "estimate"]);
+export const AreaSourceEnum = z.enum(["google", "footprint", "manual", "estimate", "polygon"]);
 export const FootprintSourceEnum = z.enum(["user-drawn", "microsoft-footprint", "google-footprint"]);
 export const ShadingSourceEnum = z.enum(["google_measured", "user_input", "description", "heuristic"]);
 

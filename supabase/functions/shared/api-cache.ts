@@ -379,12 +379,27 @@ export async function getNASAPowerData(
     const fullResponse = await response.json();
     
     // Calculate annual GHI from daily values
+    // NASA POWER returns values in MJ/m²/day, need to convert to kWh/m²/year
     const dailyValues = fullResponse.properties?.parameter?.ALLSKY_SFC_SW_DWN;
     let annualGHI = 0;
     
     if (dailyValues) {
       const values = Object.values(dailyValues) as number[];
-      annualGHI = values.reduce((sum, val) => sum + (val > 0 ? val : 0), 0);
+      // Filter out invalid values and sum daily values
+      const validValues = values.filter(val => val > 0 && val < 50); // Daily GHI typically 2-35 MJ/m²/day
+      const totalMJ = validValues.reduce((sum, val) => sum + val, 0);
+      // Convert MJ to kWh: 1 MJ = 0.278 kWh
+      annualGHI = Math.round(totalMJ * 0.278);
+      
+      console.log(`NASA POWER conversion: ${validValues.length} valid days, total ${totalMJ.toFixed(1)} MJ/m²/year → ${annualGHI} kWh/m²/year`);
+      console.log(`Daily average: ${(totalMJ / validValues.length).toFixed(2)} MJ/m²/day`);
+      
+      // Sanity check: annual GHI should be 1000-2500 kWh/m²/year in Brazil
+      if (annualGHI > 3000 || annualGHI < 500) {
+        console.warn(`⚠️ NASA POWER GHI seems invalid: ${annualGHI} kWh/m²/year`);
+        // Use average Brazilian GHI as fallback
+        annualGHI = 1800;
+      }
     }
     
     const locationElevation = fullResponse.geometry?.coordinates?.[2];

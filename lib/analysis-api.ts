@@ -164,28 +164,47 @@ export async function analyzeAddress(
 export function transformAnalysisData(apiData: AnalysisResponse['data']) {
   if (!apiData) return null;
 
-  console.log('transformAnalysisData - simplified data:', apiData);
+  console.log('transformAnalysisData - API data received:', apiData);
 
-  return {
+  // Map area source to valid schema values
+  const mapAreaSource = (source: string) => {
+    switch (source) {
+      case 'polygon': return 'manual' as const;
+      case 'google': return 'google' as const;
+      case 'footprint': return 'footprint' as const;
+      case 'estimate': return 'estimate' as const;
+      default: return 'manual' as const;
+    }
+  };
+
+  const transformedData = {
     id: apiData.id,
     coordinates: apiData.coordinates,
-    usableArea: apiData.usable_area,
-    areaSource: apiData.area_source,
-    annualIrradiation: apiData.annual_irradiation,
-    irradiationSource: apiData.irradiation_source,
-    shadingIndex: apiData.shading_index,
-    estimatedProduction: apiData.estimated_production,
-    verdict: apiData.verdict,
-    reasons: apiData.reasons,
-    recommendations: apiData.recommendations,
-    warnings: apiData.warnings,
-    coverage: apiData.coverage,
-    apiCacheIds: apiData.api_cache_ids,
-    // Default values for compatibility
-    address: '',
+    usableArea: apiData.usable_area || 0,
+    areaSource: mapAreaSource(apiData.area_source),
+    annualIrradiation: apiData.annual_irradiation || 0,
+    annualGHI: apiData.annual_irradiation || 0, // Same value for compatibility
+    irradiationSource: apiData.irradiation_source || 'unknown',
+    shadingIndex: apiData.shading_index || 0,
+    shadingLoss: Math.round((apiData.shading_index || 0) * 100),
+    estimatedProduction: apiData.estimated_production || 0,
+    verdict: (apiData.verdict || 'Não apto') as "Apto" | "Parcial" | "Não apto",
+    reasons: apiData.reasons || [],
+    recommendations: apiData.recommendations || [],
+    warnings: apiData.warnings || [],
+    coverage: {
+      google: apiData.coverage?.google || false,
+      dataQuality: apiData.coverage?.google ? "measured" : "estimated"
+    },
+    // Default values required by schema
+    address: 'Localização analisada',
     confidence: 'Média' as const,
-    shadingLoss: Math.round(apiData.shading_index * 100),
     footprints: [],
-    usageFactor: 0.8
+    usageFactor: 0.8,
+    // API tracking data
+    apiCacheIds: apiData.api_cache_ids
   };
+
+  console.log('transformAnalysisData - transformed data:', transformedData);
+  return transformedData;
 }

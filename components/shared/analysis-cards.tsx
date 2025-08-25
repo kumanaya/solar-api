@@ -629,8 +629,16 @@ export function SystemConfigCard({
   const panelArea = 2.5; // Área padrão por painel 550W
   const panelEfficiency = 21.5;
   
-  // Se técnico especificou quantidade, usar essa configuração
-  const actualPanels = specifiedPanels || Math.floor(usableArea / panelArea);
+  // Calcular número realístico de painéis baseado na área útil e espaçamento
+  // Considerando espaçamento entre painéis, área para manutenção e orientação otimizada
+  const usableAreaForPanels = Math.min(usableArea * 0.7, 120); // Máximo 120m² para uso residencial, 70% da área útil
+  const maxPanelsForArea = Math.floor(usableAreaForPanels / panelArea);
+  
+  // Limitar sistema para uso residencial/comercial (máximo 20kWp para começar)
+  const maxPanelsForPower = Math.floor(20000 / panelPower); // Máximo 20kWp
+  
+  // Se técnico especificou quantidade, usar essa configuração, senão usar o menor entre área e potência
+  const actualPanels = specifiedPanels || Math.min(maxPanelsForArea, maxPanelsForPower);
   const totalPower = actualPanels * (panelPower / 1000); // Converter para kWp
 
   return (
@@ -672,7 +680,7 @@ export function SystemConfigCard({
       {/* Detalhes do arranjo */}
       <div className="space-y-2 text-sm text-muted-foreground border-t pt-2">
         <div className="flex justify-between">
-          <span>Área total ocupada:</span>
+          <span>Área ocupada pelos painéis:</span>
           <span className="font-medium">
             {(actualPanels * panelArea).toFixed(1)}m²
           </span>
@@ -684,11 +692,16 @@ export function SystemConfigCard({
           </span>
         </div>
         <div className="flex justify-between">
-          <span>Fator de ocupação:</span>
+          <span>Aproveitamento da área:</span>
           <span className="font-medium">
             {((actualPanels * panelArea / usableArea) * 100).toFixed(0)}%
           </span>
         </div>
+        {!specifiedPanels && totalPower < 15 && (
+          <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
+            💡 Sistema dimensionado para uso residencial otimizado
+          </div>
+        )}
         {specifiedPanels && (
           <div className="flex justify-between text-blue-700">
             <span>Configuração do técnico:</span>

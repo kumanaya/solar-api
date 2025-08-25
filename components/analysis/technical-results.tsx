@@ -141,39 +141,39 @@ export function TechnicalResults() {
       )}
 
       <AreaCard
-        usableArea={data.usableArea}
-        areaSource={data.areaSource}
-        footprints={data.footprints}
+        usableArea={displayData.usableArea}
+        areaSource={displayData.areaSource}
+        footprints={displayData.footprints}
         usageFactor={localUsageFactor}
         onUsageFactorChange={handleUsageFactorChange}
         isEditable={true}
       />
 
       <IrradiationCard
-        annualIrradiation={data.annualIrradiation}
-        irradiationSource={data.irradiationSource}
-        sources={[data.irradiationSource || 'PVGIS']}
+        annualIrradiation={displayData.annualIrradiation}
+        irradiationSource={displayData.irradiationSource}
+        sources={[displayData.irradiationSource || 'PVGIS']}
       />
 
       <ShadingCard
-        shadingIndex={data.shadingIndex}
-        shadingLoss={data.shadingLoss}
+        shadingIndex={displayData.shadingIndex}
+        shadingLoss={displayData.shadingLoss}
         showDetails={true}
       />
 
       <ProductionCard
         estimatedProduction={displayData.estimatedProduction}
-        usableArea={data.usableArea}
+        usableArea={displayData.usableArea}
         estimatedProductionYear1={displayData.estimatedProductionAC}
         estimatedProductionYear25={displayData.estimatedProductionAC ? Math.round(displayData.estimatedProductionAC * 0.85) : undefined}
         showDetails={true}
       />
 
       <SystemConfigCard
-        usableArea={data.usableArea}
-        technicianInputs={data.technicianInputs ? {
-          panel_count: data.technicianInputs.panel_count ?? undefined,
-          panel_capacity_watts: data.technicianInputs.panel_capacity_watts ?? undefined,
+        usableArea={displayData.usableArea}
+        technicianInputs={displayData.technicianInputs ? {
+          panel_count: displayData.technicianInputs.panel_count ?? undefined,
+          panel_capacity_watts: displayData.technicianInputs.panel_capacity_watts ?? undefined,
         } : undefined}
       />
 
@@ -182,7 +182,7 @@ export function TechnicalResults() {
       />
 
       <FinancialAnalysisCard
-        technicianInputs={data.technicianInputs}
+        technicianInputs={displayData.technicianInputs}
         estimatedProduction={displayData.estimatedProduction}
         financialData={displayData.financialData}
       />
@@ -205,7 +205,7 @@ export function TechnicalResults() {
       )}
 
       <ImageryInfoCard
-        googleSolarData={data.googleSolarData}
+        googleSolarData={displayData.googleSolarData}
       />
     </div>
   );

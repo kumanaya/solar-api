@@ -143,8 +143,15 @@ Deno.serve(async (req: Request) => {
     const isBrazil = isBrazilianCoordinate(lat, lng);
     console.log(`Análise solar simplificada: lat=${lat}, lng=${lng}, Brasil=${isBrazil}`);
 
-    // Initialize Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // Initialize Supabase client with user's JWT token
+    const authToken = req.headers.get("Authorization")?.replace("Bearer ", "").trim();
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: {
+        headers: {
+          Authorization: `Bearer ${authToken}`
+        }
+      }
+    });
 
     // Clean expired cache entries (periodic cleanup)
     await cleanExpiredCache(supabase);
