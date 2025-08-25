@@ -320,15 +320,18 @@ export function IrradiationCard({
       </div>
 
       {/* Fonte dos dados */}
-      <div className="flex flex-wrap gap-1">
-        <Badge variant="outline" className="text-xs">
-          {sources ? sources.join(" + ") : irradiationSource}
-        </Badge>
-        {irradiationSourceRaw && irradiationSourceRaw !== irradiationSource && (
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground text-sm">Fonte:</span>
+        <div className="flex items-center gap-1">
           <Badge variant="outline" className="text-xs">
-            Fonte: {irradiationSourceRaw}
+            {sources ? sources.join(" + ") : irradiationSource}
           </Badge>
-        )}
+          {irradiationSourceRaw && irradiationSourceRaw !== irradiationSource && (
+            <Badge variant="outline" className="text-xs">
+              {irradiationSourceRaw}
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Detalhes quando bloqueado */}
@@ -412,16 +415,16 @@ export function ShadingCard({
       </div>
 
       {/* Detalhes técnicos */}
-      <div className="space-y-2 text-sm text-muted-foreground">
-        <div className="flex justify-between">
-          <span>Índice de sombreamento:</span>
-          <span className="font-medium">
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground">Índice de sombreamento:</span>
+          <span className="font-medium text-right">
             {typeof shadingIndex === "number" ? shadingIndex.toFixed(2) : "N/A"}
           </span>
         </div>
         {shadingSource && (
-          <div className="flex justify-between">
-            <span>Fonte dos dados:</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Fonte:</span>
             <Badge variant="outline" className="text-xs">
               {displayShadingSource()}
             </Badge>
@@ -431,20 +434,20 @@ export function ShadingCard({
 
       {/* Detalhes adicionais */}
       {showDetails && (
-        <div className="space-y-2 text-sm text-muted-foreground border-t pt-2">
-          <div className="flex justify-between">
-            <span>Período crítico:</span>
-            <span className="font-medium">9h-15h</span>
+        <div className="space-y-2 text-sm border-t pt-2">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Período crítico:</span>
+            <span className="font-medium text-right">9h-15h</span>
           </div>
-          <div className="flex justify-between">
-            <span>Impacto na produção:</span>
-            <span className="font-medium text-red-600">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Impacto na produção:</span>
+            <span className="font-medium text-red-600 text-right">
               {(shadingLoss / 100 * 100).toFixed(1)}% menor
             </span>
           </div>
-          <div className="flex justify-between">
-            <span>Recomendação:</span>
-            <span className="font-medium">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Recomendação:</span>
+            <span className="font-medium text-right">
               {shadingLoss < 10 ? "Aceitável" : "Verificar alternativas"}
             </span>
           </div>
@@ -506,26 +509,26 @@ export function ProductionCard({
 
       {/* Detalhes de produção */}
       {showDetails && (
-        <div className="space-y-2 text-sm text-muted-foreground border-t pt-2">
-          <div className="flex justify-between">
-            <span>Produção mensal média:</span>
-            <span className="font-medium">
+        <div className="space-y-2 text-sm border-t pt-2">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Produção mensal média:</span>
+            <span className="font-medium text-right">
               {formatNumber(Math.round(estimatedProduction / 12))} kWh
             </span>
           </div>
-          <div className="flex justify-between">
-            <span>Produção diária média:</span>
-            <span className="font-medium">
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Produção diária média:</span>
+            <span className="font-medium text-right">
               {formatNumber(Math.round(estimatedProduction / 365))} kWh
             </span>
           </div>
           <div className="flex justify-between items-start">
-            <span>Impacto ambiental:</span>
+            <span className="text-muted-foreground">Impacto ambiental:</span>
             <div className="text-right">
               <div className="font-medium text-green-600">
                 {formatNumber(Math.round(estimatedProduction * 0.4))} kg CO₂/ano
               </div>
-              <div className="flex items-center gap-1 mt-1">
+              <div className="flex items-center justify-end gap-1 mt-1">
                 <Leaf className="h-3 w-3 text-green-500" />
                 <span className="text-xs">
                   Equivale a {formatNumber(Math.round((estimatedProduction * 0.4) / 22))} árvores
@@ -752,43 +755,29 @@ export function SystemLifetimeCard({
       </div>
 
       {/* Detalhes de degradação */}
-      <div className="space-y-2 text-sm text-muted-foreground">
-        <div className="flex justify-between">
-          <span>Taxa de degradação anual:</span>
-          <span className="font-medium">
+      <div className="space-y-2 text-sm">
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground">Taxa de degradação anual:</span>
+          <span className="font-medium text-right">
             {degradationRate}% a.a.
           </span>
         </div>
-        <div className="flex justify-between">
-          <span>Eficiência aos {lifetimeYears} anos:</span>
-          <span className={`font-medium ${
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground">Eficiência aos {lifetimeYears} anos:</span>
+          <span className={`font-medium text-right ${
             finalEfficiency > 85 ? "text-green-600" : "text-yellow-600"
           }`}>
             {finalEfficiency.toFixed(1)}%
           </span>
         </div>
-        <div className="flex justify-between">
-          <span>Produção média anual:</span>
-          <span className="font-medium">
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground">Produção média anual:</span>
+          <span className="font-medium text-right">
             {formatNumber(Math.round(totalProduction / lifetimeYears))} kWh
           </span>
         </div>
       </div>
 
-      {/* Garantias */}
-      <div className="text-sm text-muted-foreground border-t pt-2">
-        <div className="flex items-start gap-2">
-          <Shield className="h-4 w-4 text-green-500 mt-0.5" />
-          <div>
-            <p className="font-medium">Garantias inclusas:</p>
-            <ul className="list-disc list-inside text-xs space-y-1 mt-1">
-              <li>Performance linear por {lifetimeYears} anos</li>
-              <li>Defeitos de fabricação por 12 anos</li>
-              <li>Eficiência mínima de {finalEfficiency.toFixed(0)}% ao final</li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </BaseCard>
   );
 }
