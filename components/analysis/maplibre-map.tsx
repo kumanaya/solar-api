@@ -75,7 +75,7 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
 export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, showShadow = false, showRelief = false, showDataLayers = false, selectedDataLayer, isDrawingMode, onDrawingCoordinatesChange, onDataLayersDataChange }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
+  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction, currentPolygon } = useAnalysis();
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<string>(layer);
   const [showAttribution, setShowAttribution] = useState(false);
@@ -301,9 +301,45 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     
   }, [layer, isMapLoaded, currentLayer]);
 
-  // Navigate to coordinates from address search
+  // Function to calculate polygon bounds and center
+  const getPolygonBounds = (polygon: { coordinates: number[][][] }) => {
+    const coords = polygon.coordinates[0]; // First ring
+    let minLng = coords[0][0], maxLng = coords[0][0];
+    let minLat = coords[0][1], maxLat = coords[0][1];
+    
+    coords.forEach(([lng, lat]) => {
+      minLng = Math.min(minLng, lng);
+      maxLng = Math.max(maxLng, lng);
+      minLat = Math.min(minLat, lat);
+      maxLat = Math.max(maxLat, lat);
+    });
+    
+    const center = [(minLng + maxLng) / 2, (minLat + maxLat) / 2] as [number, number];
+    return { bounds: [minLng, minLat, maxLng, maxLat], center };
+  };
+
+  // Navigate to polygon or coordinates with priority for polygon
   useEffect(() => {
-    if (!map.current || !isMapLoaded || !data.coordinates) return;
+    if (!map.current || !isMapLoaded) return;
+    
+    // Priority 1: If we have a drawn polygon, focus on it
+    if (currentPolygon && currentPolygon.coordinates?.[0]?.length > 0) {
+      const { bounds, center } = getPolygonBounds(currentPolygon);
+      console.log('Navigation effect triggered - fitting to polygon bounds:', bounds);
+      
+      // Fit to polygon bounds with padding
+      map.current.fitBounds(bounds as [number, number, number, number], {
+        padding: 50,
+        duration: 2000
+      });
+      
+      // Update previous coordinates to prevent address navigation
+      prevCoordinatesRef.current = center;
+      return;
+    }
+    
+    // Priority 2: Navigate to address coordinates if no polygon
+    if (!data.coordinates) return;
     
     const lng = Array.isArray(data.coordinates) ? data.coordinates[0] : data.coordinates?.lng;
     const lat = Array.isArray(data.coordinates) ? data.coordinates[1] : data.coordinates?.lat;
@@ -321,7 +357,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       return;
     }
     
-    console.log('Navigation effect triggered - flying to:', [lng, lat]);
+    console.log('Navigation effect triggered - flying to address coordinates:', [lng, lat]);
     
     // Update the previous coordinates reference
     prevCoordinatesRef.current = [lng, lat];
@@ -333,7 +369,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       duration: 2000
     });
       
-  }, [data.coordinates, isMapLoaded]);
+  }, [data.coordinates, isMapLoaded, currentPolygon]);
 
   // This effect is now handled by the navigation effect above
 
