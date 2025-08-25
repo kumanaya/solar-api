@@ -192,6 +192,7 @@ export function TechnicalPanel() {
               panel_count: analysis.technicianInputs.panel_count ?? undefined,
               panel_capacity_watts: analysis.technicianInputs.panel_capacity_watts ?? undefined,
             } : undefined}
+            suggestedSystemConfig={analysis.suggestedSystemConfig}
             isLocked={true} 
           />
 

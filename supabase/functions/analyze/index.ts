@@ -12,7 +12,8 @@ import {
   classifyVerdict, 
   calculatePolygonArea,
   estimateShading,
-  getBrazilRegionalTemp
+  getBrazilRegionalTemp,
+  calculateSuggestedSystemConfig
 } from "../shared/solar-calculations.ts";
 import {
   getGoogleSolarData,
@@ -162,12 +163,12 @@ Deno.serve(async (req: Request) => {
       getNASAPowerData(supabase, lat, lng)
     ]);
 
-    // Extract results
-    const googleData = googleResult.status === 'fulfilled' && googleResult.value.success 
+    // Extract results - only consider data valid if API call was successful AND has data
+    const googleData = googleResult.status === 'fulfilled' && googleResult.value.success && googleResult.value.data
       ? googleResult.value.data : null;
-    const pvgisData = pvgisResult.status === 'fulfilled' && pvgisResult.value.success 
+    const pvgisData = pvgisResult.status === 'fulfilled' && pvgisResult.value.success && pvgisResult.value.data
       ? pvgisResult.value.data : null;
-    const nasaData = nasaResult.status === 'fulfilled' && nasaResult.value.success 
+    const nasaData = nasaResult.status === 'fulfilled' && nasaResult.value.success && nasaResult.value.data
       ? nasaResult.value.data : null;
 
     // Calculate area from polygon if provided
@@ -239,6 +240,14 @@ Deno.serve(async (req: Request) => {
 
     const marginOfError = getMarginOfError(areaSource);
 
+    // Calculate suggested system configuration using shared function
+    const suggestedConfig = calculateSuggestedSystemConfig({
+      usable_area_m2: usableArea,
+      shade_index: shadingData.shading_factor,
+      is_brazil: isBrazil,
+      lat: lat
+    });
+
     // Save analysis to database and return minimal data + API IDs
     const { data: analysisRecord, error: saveError } = await supabase
       .from('analysis_results')
@@ -288,6 +297,16 @@ Deno.serve(async (req: Request) => {
         reasons: verdict.reasons,
         recommendations: verdict.recommendations,
         warnings: verdict.warnings,
+        suggested_system_config: {
+          panel_count: suggestedConfig.panel_count,
+          system_power_kwp: suggestedConfig.system_power_kwp,
+          panel_power_watts: suggestedConfig.panel_power_watts,
+          panel_area_m2: suggestedConfig.panel_area_m2,
+          module_efficiency_percent: suggestedConfig.module_efficiency_percent,
+          occupied_area_m2: suggestedConfig.occupied_area_m2,
+          power_density_w_m2: suggestedConfig.power_density_w_m2,
+          area_utilization_percent: suggestedConfig.area_utilization_percent
+        },
         coverage: {
           google: !!googleData,
           pvgis: !!pvgisData,

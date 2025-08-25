@@ -395,3 +395,80 @@ export function classifyVerdict(params: {
     warnings
   };
 }
+
+/**
+ * Calculate suggested system configuration based on area and conditions
+ */
+export function calculateSuggestedSystemConfig(params: {
+  usable_area_m2: number;
+  shade_index: number;
+  is_brazil?: boolean;
+  estimated_production_kwh?: number;
+}): {
+  panel_count: number;
+  system_power_kwp: number;
+  panel_power_watts: number;
+  panel_area_m2: number;
+  module_efficiency_percent: number;
+  occupied_area_m2: number;
+  power_density_w_m2: number;
+  area_utilization_percent: number;
+} {
+  const area = params.usable_area_m2;
+  const shade = Math.max(0, Math.min(1, params.shade_index));
+  const isBrazil = params.is_brazil ?? false;
+  
+  // Panel specifications (modern 550W panels)
+  const panelPowerWatts = 550;
+  const panelAreaM2 = 2.5; // Typical area for 550W panel
+  const moduleEfficiency = 21.5;
+  
+  // Determine system size based on area analysis (same logic as classifyVerdict)
+  let targetPowerKwp = 0;
+  
+  if (area >= 25) {
+    // Large area: 5-8kWp system
+    targetPowerKwp = Math.min(8, area * 0.25); // ~250W per m²
+  } else if (area >= 20) {
+    // Good area: 4-6kWp system
+    targetPowerKwp = Math.min(6, area * 0.25);
+  } else if (area >= 15) {
+    // Adequate area: 3-4kWp system (standard residential)
+    targetPowerKwp = Math.min(4, area * 0.22);
+  } else if (area >= 12) {
+    // Small area: 2-3kWp system
+    targetPowerKwp = Math.min(3, area * 0.20);
+  } else if (area >= 8) {
+    // Minimum area: 1.5-2kWp system
+    targetPowerKwp = Math.min(2, area * 0.18);
+  } else {
+    // Very small area: minimal system
+    targetPowerKwp = Math.max(1.1, area * 0.15); // At least 1.1kWp (2 panels)
+  }
+  
+  // Adjust for shading conditions
+  if (shade > 0.3) {
+    // High shading: reduce system size slightly
+    targetPowerKwp *= 0.9;
+  }
+  
+  // Calculate number of panels
+  const panelCount = Math.max(2, Math.round(targetPowerKwp * 1000 / panelPowerWatts));
+  const actualPowerKwp = Number(((panelCount * panelPowerWatts) / 1000).toFixed(2));
+  
+  // Calculate areas and utilization
+  const occupiedAreaM2 = Number((panelCount * panelAreaM2).toFixed(1));
+  const powerDensityWM2 = Math.round((actualPowerKwp * 1000) / occupiedAreaM2);
+  const areaUtilizationPercent = Math.round((occupiedAreaM2 / area) * 100);
+  
+  return {
+    panel_count: panelCount,
+    system_power_kwp: actualPowerKwp,
+    panel_power_watts: panelPowerWatts,
+    panel_area_m2: panelAreaM2,
+    module_efficiency_percent: moduleEfficiency,
+    occupied_area_m2: occupiedAreaM2,
+    power_density_w_m2: powerDensityWM2,
+    area_utilization_percent: Math.min(100, areaUtilizationPercent),
+  };
+}

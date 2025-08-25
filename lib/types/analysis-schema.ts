@@ -80,6 +80,18 @@ export const AnalysisSchema = z.object({
   googleSolarData: z.any().optional(),
   technicalNote: z.string().optional(),
   
+  // Suggested system configuration from API
+  suggestedSystemConfig: z.object({
+    panel_count: z.number(),
+    system_power_kwp: z.number(),
+    panel_power_watts: z.number(),
+    panel_area_m2: z.number(),
+    module_efficiency_percent: z.number(),
+    occupied_area_m2: z.number(),
+    power_density_w_m2: z.number(),
+    area_utilization_percent: z.number(),
+  }),
+
   // Technician inputs
   technicianInputs: z.object({
     panel_count: z.number().nullable().optional(),

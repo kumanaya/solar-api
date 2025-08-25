@@ -79,6 +79,16 @@ const defaultData: Analysis = {
   reasons: ["Dados insuficientes"],
   footprints: [],
   usageFactor: 0.75,
+  suggestedSystemConfig: {
+    panel_count: 0,
+    system_power_kwp: 0,
+    panel_power_watts: 550,
+    panel_area_m2: 2.5,
+    module_efficiency_percent: 21.5,
+    occupied_area_m2: 0,
+    power_density_w_m2: 0,
+    area_utilization_percent: 0,
+  },
   // New API tracking fields with defaults
   apiSourcesUsed: [],
   apiResponseTimes: {},

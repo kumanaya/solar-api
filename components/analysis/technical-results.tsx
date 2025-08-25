@@ -197,6 +197,7 @@ export function TechnicalResults() {
               }
             : undefined
         }
+        suggestedSystemConfig={displayData.suggestedSystemConfig}
       />
 
       <SystemLifetimeCard

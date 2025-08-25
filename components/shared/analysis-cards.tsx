@@ -76,6 +76,16 @@ export interface SystemConfigCardProps {
     panel_count?: number;
     panel_capacity_watts?: number;
   };
+  suggestedSystemConfig?: {
+    panel_count: number;
+    system_power_kwp: number;
+    panel_power_watts: number;
+    panel_area_m2: number;
+    module_efficiency_percent: number;
+    occupied_area_m2: number;
+    power_density_w_m2: number;
+    area_utilization_percent: number;
+  };
   isLocked?: boolean;
 }
 
@@ -624,25 +634,24 @@ export function VerdictCard({
 export function SystemConfigCard({
   usableArea,
   technicianInputs,
+  suggestedSystemConfig,
   isLocked = false,
 }: SystemConfigCardProps) {
-  // CORREÇÃO: Priorizar inputs do técnico sobre cálculo automático
-  const panelPower = technicianInputs?.panel_capacity_watts || 550;
+  // Use technician inputs if provided, otherwise use suggested config from API
   const specifiedPanels = technicianInputs?.panel_count;
-  const panelArea = 2.5; // Área padrão por painel 550W
-  const panelEfficiency = 21.5;
+  const specifiedPanelPower = technicianInputs?.panel_capacity_watts;
   
-  // Calcular número realístico de painéis baseado na área útil e espaçamento
-  // Considerando espaçamento entre painéis, área para manutenção e orientação otimizada
-  const usableAreaForPanels = Math.min(usableArea * 0.7, 120); // Máximo 120m² para uso residencial, 70% da área útil
-  const maxPanelsForArea = Math.floor(usableAreaForPanels / panelArea);
+  const actualPanels = specifiedPanels || suggestedSystemConfig?.panel_count || 0;
+  const panelPower = specifiedPanelPower || suggestedSystemConfig?.panel_power_watts || 550;
+  const totalPower = specifiedPanels && specifiedPanelPower 
+    ? (specifiedPanels * specifiedPanelPower) / 1000 
+    : suggestedSystemConfig?.system_power_kwp || 0;
   
-  // Limitar sistema para uso residencial/comercial (máximo 20kWp para começar)
-  const maxPanelsForPower = Math.floor(20000 / panelPower); // Máximo 20kWp
-  
-  // Se técnico especificou quantidade, usar essa configuração, senão usar o menor entre área e potência
-  const actualPanels = specifiedPanels || Math.min(maxPanelsForArea, maxPanelsForPower);
-  const totalPower = actualPanels * (panelPower / 1000); // Converter para kWp
+  const panelArea = suggestedSystemConfig?.panel_area_m2 || 2.5;
+  const panelEfficiency = suggestedSystemConfig?.module_efficiency_percent || 21.5;
+  const occupiedArea = suggestedSystemConfig?.occupied_area_m2 || 0;
+  const powerDensity = suggestedSystemConfig?.power_density_w_m2 || 0;
+  const areaUtilization = suggestedSystemConfig?.area_utilization_percent || 0;
 
   return (
     <BaseCard
@@ -682,27 +691,28 @@ export function SystemConfigCard({
 
       {/* Detalhes do arranjo */}
       <div className="space-y-2 text-sm text-muted-foreground border-t pt-2">
-        <div className="flex justify-between">
-          <span>Área ocupada pelos painéis:</span>
-          <span className="font-medium">
-            {(actualPanels * panelArea).toFixed(1)}m²
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground">Área ocupada pelos painéis:</span>
+          <span className="font-medium text-right">
+            {occupiedArea.toFixed(1)}m²
           </span>
         </div>
-        <div className="flex justify-between">
-          <span>Densidade de potência:</span>
-          <span className="font-medium">
-            {((totalPower * 1000) / (actualPanels * panelArea)).toFixed(0)} W/m²
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground">Densidade de potência:</span>
+          <span className="font-medium text-right">
+            {powerDensity.toFixed(0)} W/m²
           </span>
         </div>
-        <div className="flex justify-between">
-          <span>Aproveitamento da área:</span>
-          <span className="font-medium">
-            {((actualPanels * panelArea / usableArea) * 100).toFixed(0)}%
+        <div className="flex justify-between items-center">
+          <span className="text-muted-foreground">Aproveitamento da área:</span>
+          <span className="font-medium text-right">
+            {areaUtilization.toFixed(0)}%
           </span>
         </div>
         {!specifiedPanels && totalPower < 15 && (
-          <div className="text-xs text-green-600 bg-green-50 p-2 rounded">
-            💡 Sistema dimensionado para uso residencial otimizado
+          <div className="flex items-center gap-2 text-xs text-muted-foreground border rounded p-2">
+            <Lightbulb className="h-3 w-3" />
+            <span>Sistema dimensionado para uso residencial otimizado</span>
           </div>
         )}
         {specifiedPanels && (
