@@ -68,6 +68,7 @@ const defaultData: Analysis = {
   confidence: "Baixa",
   usableArea: 0,
   areaSource: "manual",
+  marginOfError: "±5%",
   annualIrradiation: 0,
   annualGHI: 0,
   irradiationSource: "PVGIS",

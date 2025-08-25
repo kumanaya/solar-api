@@ -122,6 +122,7 @@ export function TechnicalResults() {
       }
     : data;
 
+
   return (
     <div className="space-y-4 max-w-3xl mx-auto">
       {displayData.recommendations &&
@@ -156,6 +157,7 @@ export function TechnicalResults() {
         usageFactor={localUsageFactor}
         onUsageFactorChange={handleUsageFactorChange}
         isEditable={true}
+        marginOfError={displayData.marginOfError}
       />
 
       <IrradiationCard

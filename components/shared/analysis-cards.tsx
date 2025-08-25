@@ -36,7 +36,7 @@ export interface AreaCardProps {
   onUsageFactorChange?: (value: number) => void;
   isEditable?: boolean;
   isLocked?: boolean;
-  marginOfError?: string;
+  marginOfError: string;
 }
 
 export interface IrradiationCardProps {
@@ -218,8 +218,8 @@ export function AreaCard({
       {/* Margem de erro */}
       {areaSource !== "google" && (
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Margem de erro estimada</span>
-          <span className="font-medium">{marginOfError || "±5%"}</span>
+          <span className="text-muted-foreground">Margem de erro:</span>
+          <span className="font-medium">{marginOfError}</span>
         </div>
       )}
 
@@ -275,9 +275,9 @@ export function AreaCard({
               <span>Área útil resultante:</span>
               <span className="font-medium">{usableArea}m²</span>
             </div>
-            <div className="flex justify-between">
-              <span>Margem de erro estimada:</span>
-              <span className="font-medium text-orange-600">±5%</span>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Margem de erro:</span>
+              <span className="font-medium text-orange-600 ml-2">{marginOfError}</span>
             </div>
           </div>
         )}

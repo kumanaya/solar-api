@@ -44,6 +44,7 @@ export const AnalysisSchema = z.object({
   // Area information
   usableArea: z.number(),
   areaSource: AreaSourceEnum,
+  marginOfError: z.string(),
   usageFactor: z.number(),
   
   // Solar radiation data

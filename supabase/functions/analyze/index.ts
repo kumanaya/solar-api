@@ -11,7 +11,6 @@ import {
   calculateSolarProduction, 
   classifyVerdict, 
   calculatePolygonArea,
-  SOLAR_CONSTANTS,
   estimateShading,
   getBrazilRegionalTemp
 } from "../shared/solar-calculations.ts";
@@ -220,6 +219,26 @@ Deno.serve(async (req: Request) => {
       lat: lat
     });
 
+    // Calculate margin of error based on area source
+    const getMarginOfError = (areaSource: string): string | null => {
+      switch (areaSource) {
+        case 'google':
+          return '0%'; // No margin of error for Google data
+        case 'footprint':
+          return '±3%';
+        case 'manual':
+          return '±5%';
+        case 'estimate':
+          return '±10%';
+        case 'polygon':
+          return '±5%';
+        default:
+          return '±5%';
+      }
+    };
+
+    const marginOfError = getMarginOfError(areaSource);
+
     // Save analysis to database and return minimal data + API IDs
     const { data: analysisRecord, error: saveError } = await supabase
       .from('analysis_results')
@@ -229,6 +248,7 @@ Deno.serve(async (req: Request) => {
         lng,
         usable_area: usableArea,
         area_source: areaSource,
+        margin_of_error: marginOfError,
         annual_irradiation: ghi,
         irradiation_source: irradiationSource,
         shading_index: shadingData.shading_factor,

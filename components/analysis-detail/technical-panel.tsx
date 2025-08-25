@@ -39,6 +39,7 @@ export function TechnicalPanel() {
 
   const cv = analysis.currentVersion;
 
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("pt-BR", {
       day: "2-digit",
@@ -120,7 +121,7 @@ export function TechnicalPanel() {
                 {cv.areaSource !== "google" && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Margem de erro estimada:</span>
-                    <Badge variant="outline" className="text-xs">±5%</Badge>
+                    <Badge variant="outline" className="text-xs">{cv.marginOfError}</Badge>
                   </div>
                 )}
               </div>
@@ -145,6 +146,7 @@ export function TechnicalPanel() {
             footprints={analysis.footprints}
             usageFactor={cv.usageFactor}
             isLocked={true}
+            marginOfError={cv.marginOfError}
           />
 
           <IrradiationCard

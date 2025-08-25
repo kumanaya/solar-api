@@ -25,6 +25,7 @@ supabase functions serve  # Serve edge functions locally
 - Don't use migrations
 - Before making any changes, understand the context in which they are applied.
 - Whenever you analyze the context, ask me the right questions to make the change.
+- Perform calculations on the front end only if I ask, otherwise return directly from the API.
 
 ## Architecture Overview
 
