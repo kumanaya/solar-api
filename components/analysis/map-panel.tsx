@@ -5,7 +5,6 @@ import { AddressSearch } from "./address-search";
 import { MapView } from "./map-view";
 import { DrawingToolbar } from "./drawing-toolbar";
 import { LayerToggles } from "./layer-toggles";
-import { MapPin } from "lucide-react";
 import { MapLibreMapRef } from "./maplibre-map";
 import { useAnalysis } from "./analysis-context";
 
@@ -25,16 +24,13 @@ export function MapPanel({ mapRef }: MapPanelProps) {
     });
   }, [mapRef]);
   const [isDrawingMode, setIsDrawingMode] = useState(false);
-  const [isPinMode, setIsPinMode] = useState(false);
   const [mapLayer, setMapLayer] = useState<"satellite" | "streets">("satellite");
   const [showShadow, setShowShadow] = useState(false);
   const [showRelief, setShowRelief] = useState(false);
   const [showDataLayers, setShowDataLayers] = useState(false);
   const [selectedDataLayer, setSelectedDataLayer] = useState<string>('');
-  const [hasPin, setHasPin] = useState(false);
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
   const [showDrawingInstructions, setShowDrawingInstructions] = useState(false);
-  const [showPinInstructions, setShowPinInstructions] = useState(false);
 
   // Drawing toolbar functions
   const handleUndoLastPoint = () => {
@@ -51,15 +47,6 @@ export function MapPanel({ mapRef }: MapPanelProps) {
   };
 
 
-  // Callback to receive pin status from map
-  const handlePinStatusChange = (hasPin: boolean) => {
-    setHasPin(hasPin);
-  };
-
-  // Function to handle pin removal
-  const handleClearPin = () => {
-    mapRef.current?.clearPin();
-  };
 
   // Auto-hide drawing instructions after 5 seconds
   useEffect(() => {
@@ -75,19 +62,6 @@ export function MapPanel({ mapRef }: MapPanelProps) {
     }
   }, [isDrawingMode]);
 
-  // Auto-hide pin instructions after 5 seconds
-  useEffect(() => {
-    if (isPinMode) {
-      setShowPinInstructions(true);
-      const timer = setTimeout(() => {
-        setShowPinInstructions(false);
-      }, 5000); // 5 seconds
-
-      return () => clearTimeout(timer);
-    } else {
-      setShowPinInstructions(false);
-    }
-  }, [isPinMode]);
 
   // Note: Data Layers are not auto-enabled anymore
   // Users must manually click to enable and load them
@@ -128,45 +102,13 @@ export function MapPanel({ mapRef }: MapPanelProps) {
             onDataLayersToggle={setShowDataLayers}
             selectedDataLayer={selectedDataLayer}
             onDataLayerSelect={setSelectedDataLayer}
-            hasPin={hasPin}
           />
-        )}
-        
-        {/* Botão Colocar Pin - oculto no modo desenho */}
-        {!isDrawingMode && (
-          <button
-            onClick={() => {
-              if (isPinMode || hasPin) {
-                // Se está no modo pin OU há um pin no mapa, cancelar e limpar pin existente
-                setIsPinMode(false);
-                handleClearPin();
-              } else {
-                // Se não está no modo pin e não há pin, ativar modo pin
-                setIsPinMode(true);
-                if (isDrawingMode) setIsDrawingMode(false);
-              }
-            }}
-            className={`w-full px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base shadow-lg flex items-center justify-center space-x-2 ${
-              isPinMode || hasPin
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-background text-foreground hover:bg-muted border"
-            }`}
-          >
-            <MapPin className="h-4 w-4" />
-            <span className="hidden md:inline">
-              {(isPinMode || hasPin) ? "Cancelar Pin" : "Colocar Pin"}
-            </span>
-            <span className="md:hidden">
-              {(isPinMode || hasPin) ? "Cancelar" : "Pin"}
-            </span>
-          </button>
         )}
         
         {/* Botão Desenhar telhado */}
         <button
           onClick={() => {
             setIsDrawingMode(!isDrawingMode);
-            if (isPinMode) setIsPinMode(false);
           }}
           className={`w-full px-3 md:px-4 py-2 rounded-lg font-medium transition-colors text-sm md:text-base shadow-lg ${
             isDrawingMode
@@ -192,9 +134,7 @@ export function MapPanel({ mapRef }: MapPanelProps) {
         showDataLayers={showDataLayers}
         selectedDataLayer={selectedDataLayer}
         isDrawingMode={isDrawingMode}
-        isPinMode={isPinMode}
         onDrawingCoordinatesChange={handleDrawingCoordinatesChange}
-        onPinStatusChange={handlePinStatusChange}
       />
 
       {/* Instruções de desenho - quando ativo */}
@@ -207,13 +147,6 @@ export function MapPanel({ mapRef }: MapPanelProps) {
       )}
       
       {/* Instruções de pin - quando ativo */}
-      {showPinInstructions && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10 pointer-events-none">
-          <div className="bg-black/75 text-white px-4 py-2 rounded-lg text-sm animate-fade-in">
-            Clique no mapa para colocar um pin no local desejado.
-          </div>
-        </div>
-      )}
     </div>
   );
 }

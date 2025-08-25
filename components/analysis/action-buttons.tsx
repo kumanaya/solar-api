@@ -276,10 +276,20 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
   
   
   const handleRunAnalysis = async () => {
-    // Check if we have coordinates (required)
-    if (!data.coordinates) {
-      setError('Nenhuma coordenada disponível. Selecione um endereço primeiro.');
+    // Check if we have polygon or coordinates
+    if (!currentPolygon && !data.coordinates) {
+      setError('Desenhe um polígono no mapa ou selecione um endereço primeiro.');
       return;
+    }
+    
+    // If we only have a polygon, calculate center coordinates from it
+    let coordinates = data.coordinates;
+    if (currentPolygon && !coordinates) {
+      const coords = currentPolygon.coordinates[0]; // Get first ring
+      // Calculate centroid of polygon
+      const centerLng = coords.reduce((sum, coord) => sum + coord[0], 0) / coords.length;
+      const centerLat = coords.reduce((sum, coord) => sum + coord[1], 0) / coords.length;
+      coordinates = [centerLng, centerLat];
     }
     
     if (!hasFootprintFromAction && data.footprints.length === 0 && !currentPolygon) {
@@ -292,7 +302,7 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
     setError(null);
     
     try {
-      console.log('Starting simplified analysis for coordinates:', data.coordinates);
+      console.log('Starting simplified analysis for coordinates:', coordinates);
       
       // Determine polygon to send (optional)
       let polygonToSend = currentPolygon;
@@ -311,8 +321,8 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
       }
       
       // Handle both tuple and object coordinate formats  
-      const lng = Array.isArray(data.coordinates) ? data.coordinates[0] : data.coordinates.lng;
-      const lat = Array.isArray(data.coordinates) ? data.coordinates[1] : data.coordinates.lat;
+      const lng = Array.isArray(coordinates) ? coordinates[0] : coordinates.lng;
+      const lat = Array.isArray(coordinates) ? coordinates[1] : coordinates.lat;
       const result = await analyzeAddress(
         lat,
         lng,
@@ -339,26 +349,26 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
       console.log('Analysis saved to database with ID:', transformedData.id);
       
       // Preserve current coordinates and other existing data
-      const currentCoordinates = data.coordinates;
+      const currentCoordinates = coordinates;
       updateData({
         ...transformedData, // Apply new analysis data first
-        coordinates: currentCoordinates, // Keep user's pin location
-        address: selectedAddress || transformedData.address || data.address // Keep selected address
+        coordinates: currentCoordinates, // Keep calculated or user's coordinates
+        address: selectedAddress || transformedData.address || data.address || 'Coordenadas do polígono' // Keep selected address or provide fallback
       });
       
       // Mark that we have analysis results to show the technical results
       setHasAnalysisResults(true);
       
-      // Update session storage with polygon data
+      // Update session storage with polygon data (optional - only if we have coordinates from PIN)
       try {
         const PIN_STORAGE_KEY = 'lumionfy-pin-data';
         const currentStoredData = sessionStorage.getItem(PIN_STORAGE_KEY);
-        if (currentStoredData && currentCoordinates) {
+        if (currentStoredData && data.coordinates) { // Only update if we had original coordinates
           const storedData = JSON.parse(currentStoredData);
           const updatedData = {
             ...storedData,
             coordinates: [lng, lat] as [number, number],
-            address: selectedAddress,
+            address: selectedAddress || data.address || 'Coordenadas do polígono',
             polygon: polygonToSend,
             timestamp: Date.now()
           };
@@ -376,7 +386,8 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
       setIsLoading(false);
     }
   };
-  const canAnalyze = selectedAddress && (hasFootprintFromAction || data.footprints.length > 0 || currentPolygon);
+  // Modified to allow analysis with just drawn polygon (no PIN/address required)
+  const canAnalyze = currentPolygon || (selectedAddress && (hasFootprintFromAction || data.footprints.length > 0));
   
   // Debug logging for canAnalyze
   console.log('ActionButtons canAnalyze check:', {
@@ -441,12 +452,16 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
 
         {/* Informações adicionais */}
         <div className="text-xs text-muted-foreground text-center pt-2 border-t space-y-1">
-          {!selectedAddress && (
+          {!currentPolygon && !selectedAddress && (
             <p className="text-amber-600">
-              Selecione um endereço para executar análise
+              Desenhe um polígono no mapa ou selecione um endereço para executar análise
             </p>
           )}
-          {/* Show specific footprint message if available, otherwise show generic instruction */}
+          {currentPolygon && !selectedAddress && (
+            <p className="text-green-600">
+              Polígono desenhado - pronto para análise
+            </p>
+          )}
           {selectedAddress && !hasFootprintFromAction && data.footprints.length === 0 && !currentPolygon && (
             footprintNotFoundMessage ? (
               <p className="text-orange-600">

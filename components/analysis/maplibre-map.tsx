@@ -12,10 +12,8 @@ interface MapLibreMapProps {
   showDataLayers?: boolean;
   selectedDataLayer?: string;
   isDrawingMode: boolean;
-  isPinMode?: boolean;
   onDrawingCoordinatesChange?: (coordinates: [number, number][]) => void;
   onDataLayersDataChange?: (data: unknown, loading: boolean) => void;
-  onPinStatusChange?: (hasPin: boolean) => void;
 }
 
 export interface MapLibreMapRef {
@@ -74,20 +72,15 @@ const getMapStyle = (layerType: "satellite" | "streets"): maplibregl.StyleSpecif
   }
 };
 
-export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, showShadow = false, showRelief = false, showDataLayers = false, selectedDataLayer, isDrawingMode, isPinMode = false, onDrawingCoordinatesChange, onDataLayersDataChange, onPinStatusChange }, ref) => {
+export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer, showShadow = false, showRelief = false, showDataLayers = false, selectedDataLayer, isDrawingMode, onDrawingCoordinatesChange, onDataLayersDataChange }, ref) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
-  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction, currentPolygon } = useAnalysis();
+  const { data, updateData, setSelectedAddress, drawingMode, setCurrentPolygon, setHasFootprintFromAction } = useAnalysis();
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [currentLayer, setCurrentLayer] = useState<string>(layer);
   const [showAttribution, setShowAttribution] = useState(false);
   const currentMarkerRef = useRef<maplibregl.Marker | null>(null);
   const currentPopupRef = useRef<maplibregl.Popup | null>(null);
-  const [currentPin, setCurrentPin] = useState<{
-    coordinates: [number, number];
-    address: string;
-    isUserPlaced: boolean;
-  } | null>(null);
   
   // Polygon drawing state (back to local state)
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
@@ -98,43 +91,6 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     drawingCoordinatesRef.current = drawingCoordinates;
   }, [drawingCoordinates]);
 
-  // Session storage key for pin data
-  const PIN_STORAGE_KEY = 'lumionfy-pin-data';
-
-  // Functions to manage pin data in session storage
-  const savePinToStorage = (coordinates: [number, number], address: string, polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" }) => {
-    try {
-      const pinData = {
-        coordinates,
-        address,
-        polygon: polygon || currentPolygon,
-        timestamp: Date.now()
-      };
-      sessionStorage.setItem(PIN_STORAGE_KEY, JSON.stringify(pinData));
-    } catch (error) {
-      console.error('Error saving pin to session storage:', error);
-    }
-  };
-
-  const loadPinFromStorage = () => {
-    try {
-      const stored = sessionStorage.getItem(PIN_STORAGE_KEY);
-      if (stored) {
-        return JSON.parse(stored);
-      }
-    } catch (error) {
-      console.error('Error loading pin from session storage:', error);
-    }
-    return null;
-  };
-
-  const clearPinFromStorage = () => {
-    try {
-      sessionStorage.removeItem(PIN_STORAGE_KEY);
-    } catch (error) {
-      console.error('Error clearing pin from session storage:', error);
-    }
-  };
 
   // Helper function to manage popup (ensure only one exists at a time)
   const showPopup = (lngLat: [number, number] | maplibregl.LngLatLike, content: string) => {
@@ -231,12 +187,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         currentPopupRef.current = null;
       }
       
-      // Clear all pin state
-      setCurrentPin(null);
-      console.log('Pin state cleared');
-      
-      // Clear from session storage
-      clearPinFromStorage();
+      // Clear marker state
+      console.log('Marker state cleared');
       
       // Clear selected address and reset analysis context
       setSelectedAddress('');
@@ -360,8 +312,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       return;
     }
     
-    // Skip if we already have a pin at these coordinates
-    if (currentPin && currentPin.coordinates[0] === lng && currentPin.coordinates[1] === lat) {
+    // Skip if coordinates are the same as current data
+    if (data.coordinates && Array.isArray(data.coordinates) && data.coordinates[0] === lng && data.coordinates[1] === lat) {
       return;
     }
     
@@ -374,7 +326,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       duration: 2000
     });
       
-  }, [data.coordinates, isMapLoaded, currentPin]);
+  }, [data.coordinates, isMapLoaded]);
 
   // This effect is now handled by the navigation effect above
 
@@ -520,212 +472,11 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
 
     if (drawingMode || isDrawingMode) {
       map.current.getCanvas().style.cursor = 'crosshair';
-    } else if (isPinMode) {
-      map.current.getCanvas().style.cursor = 'copy';
     } else {
       map.current.getCanvas().style.cursor = '';
     }
-  }, [drawingMode, isDrawingMode, isPinMode, isMapLoaded]);
+  }, [drawingMode, isDrawingMode, isMapLoaded]);
 
-  // Handle pin placement
-  useEffect(() => {
-    if (!map.current || !isMapLoaded) return;
-
-    const handleMapClick = (e: maplibregl.MapMouseEvent) => {
-      if (!isPinMode) return;
-
-      const { lng, lat } = e.lngLat;
-      
-      // Create pin immediately
-      createPinAtLocation([lng, lat], true);
-    };
-
-    const createPinAtLocation = (coordinates: [number, number], isUserPlaced: boolean) => {
-      const [lng, lat] = coordinates;
-      
-      // Remove existing marker
-      if (currentMarkerRef.current) {
-        currentMarkerRef.current.remove();
-        currentMarkerRef.current = null;
-      }
-      
-      // Create new marker - red for user placed, blue for address search
-      currentMarkerRef.current = new maplibregl.Marker({
-        color: isUserPlaced ? '#ef4444' : '#3b82f6'
-      })
-        .setLngLat([lng, lat])
-        .addTo(map.current!);
-      
-      // Use coordinates as immediate address
-      const tempAddress = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
-      
-      // Update state immediately - only the pin state
-      setCurrentPin({
-        coordinates: [lng, lat] as [number, number],
-        address: tempAddress,
-        isUserPlaced
-      });
-      
-      if (isUserPlaced) {
-        savePinToStorage([lng, lat], tempAddress);
-      }
-      
-      // Update context data for analysis to work
-      updateData({
-        address: tempAddress,
-        coordinates: [lng, lat] as [number, number],
-        // Reset footprints when placing new pin
-        footprints: [],
-        usableArea: 0,
-        areaSource: 'manual' as const
-      });
-      
-      // Set selected address for analysis button to work
-      if (isUserPlaced) {
-        setSelectedAddress(tempAddress);
-      }
-      
-      // Geocode in background to get proper address
-      setTimeout(async () => {
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1`,
-            {
-              headers: { 'User-Agent': 'SolarAnalysis/1.0' }
-            }
-          );
-          
-          if (response.ok) {
-            const result = await response.json();
-            const address = result.display_name || tempAddress;
-            
-            // Update both pin state and context with real address
-            setCurrentPin(prev => {
-              if (prev && prev.coordinates[0] === lng && prev.coordinates[1] === lat) {
-                if (isUserPlaced) {
-                  savePinToStorage([lng, lat], address);
-                }
-                return { ...prev, address };
-              }
-              return prev;
-            });
-            
-            // Update context and selected address for analysis
-            if (isUserPlaced) {
-              updateData({
-                address: address,
-                coordinates: [lng, lat] as [number, number]
-              });
-              setSelectedAddress(address);
-            }
-          }
-        } catch (error) {
-          console.error('Geocoding error:', error);
-        }
-      }, 100);
-    };
-
-    if (isPinMode) {
-      map.current.on('click', handleMapClick);
-    }
-
-    return () => {
-      if (map.current) {
-        map.current.off('click', handleMapClick);
-      }
-    };
-  }, [isPinMode, isMapLoaded, updateData, setSelectedAddress]);
-
-  // Restore pin from session storage on map load
-  useEffect(() => {
-    if (!map.current || !isMapLoaded || currentPin) return;
-
-    const savedPin = loadPinFromStorage();
-    // Only load saved pin if we have a selected address or it's not default coordinates
-    if (savedPin && savedPin.coordinates && savedPin.address && 
-        (data.address || (Array.isArray(data.coordinates) ? (data.coordinates[0] !== -46.6333 && data.coordinates[1] !== -23.5505) : (data.coordinates?.lng !== -46.6333 && data.coordinates?.lat !== -23.5505)))) {
-      console.log('Loading saved pin from storage:', savedPin);
-      const [lng, lat] = savedPin.coordinates;
-      
-      // Create marker
-      if (currentMarkerRef.current) {
-        currentMarkerRef.current.remove();
-      }
-      
-      currentMarkerRef.current = new maplibregl.Marker({
-        color: '#ef4444'
-      })
-        .setLngLat([lng, lat])
-        .addTo(map.current!);
-      
-      // Set pin state
-      setCurrentPin({
-        coordinates: [lng, lat],
-        address: savedPin.address,
-        isUserPlaced: true
-      });
-      
-      // Restore polygon if available
-      if (savedPin.polygon) {
-        setCurrentPolygon(savedPin.polygon);
-        
-        // Visualize the restored polygon on the map
-        const polygonCoords = savedPin.polygon.coordinates[0];
-        if (polygonCoords && polygonCoords.length > 0) {
-          // Convert to [lng, lat] format and calculate area
-          const coords = polygonCoords.map((coord: [number, number]) => [coord[0], coord[1]] as [number, number]);
-          const area = calculatePolygonArea(coords);
-          addFinishedPolygonVisualization(coords, Math.round(area));
-        }
-      }
-      
-      // Update context data for analysis to work
-      const contextData = {
-        address: savedPin.address,
-        coordinates: [lng, lat] as [number, number],
-        footprints: [] as Array<{
-          id: string;
-          coordinates: [number, number][];
-          area: number;
-          isActive: boolean;
-          source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
-        }>,
-        usableArea: 0,
-        areaSource: 'manual' as "google" | "footprint" | "manual" | "estimate"
-      };
-      
-      // If we have polygon data, create footprint from it
-      if (savedPin.polygon) {
-        const polygonCoords = savedPin.polygon.coordinates[0];
-        if (polygonCoords && polygonCoords.length > 0) {
-          const coords = polygonCoords.map((coord: [number, number]) => [coord[0], coord[1]] as [number, number]);
-          const area = calculatePolygonArea(coords);
-          
-          contextData.footprints = [{
-            id: 'restored-polygon',
-            coordinates: coords,
-            area: Math.round(area),
-            isActive: true,
-            source: (savedPin.polygon.source as "user-drawn" | "microsoft-footprint" | "google-footprint") || 'user-drawn'
-          }];
-          contextData.usableArea = Math.round(area * 0.75);
-          contextData.areaSource = savedPin.polygon.source === 'user-drawn' ? 'manual' : 'footprint';
-        }
-      }
-      
-      updateData(contextData);
-      
-      // Set selected address for analysis button to work
-      setSelectedAddress(savedPin.address);
-      
-      // Zoom to saved location
-      map.current.flyTo({
-        center: [lng, lat],
-        zoom: 18,
-        duration: 2000
-      });
-    }
-  }, [isMapLoaded, currentPin]);
 
   // Mock data layer management functions
   const processAndAddDataLayer = async (layerKey: string) => {
@@ -739,18 +490,6 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   };
 
 
-  // Notify pin status changes only - use useRef to avoid dependency issues
-  const prevPinStatusRef = useRef<boolean | null>(null);
-  
-  useEffect(() => {
-    const currentStatus = currentPin?.isUserPlaced || false;
-    
-    // Only call callback if status actually changed
-    if (prevPinStatusRef.current !== currentStatus) {
-      onPinStatusChange?.(currentStatus);
-      prevPinStatusRef.current = currentStatus;
-    }
-  }, [currentPin]); // Removed onPinStatusChange from dependencies
 
   // Handle NDVI layer visibility
   useEffect(() => {
@@ -785,13 +524,13 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   useEffect(() => {
     if (!map.current || !isMapLoaded) return;
 
-    if (selectedDataLayer && selectedDataLayer !== '' && currentPin) {
+    if (selectedDataLayer && selectedDataLayer !== '' && data.coordinates) {
       processAndAddDataLayer(selectedDataLayer);
     } else {
       // Remove layer when none selected
       removeDataLayer();
     }
-  }, [selectedDataLayer, isMapLoaded, currentPin]);
+  }, [selectedDataLayer, isMapLoaded, data.coordinates]);
 
   // Handle polygon drawing
   useEffect(() => {
@@ -955,14 +694,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       };
       setCurrentPolygon(userPolygon);
       
-      // Update session storage with user-drawn polygon
-      if (currentPin) {
-        savePinToStorage(
-          currentPin.coordinates,
-          currentPin.address,
-          userPolygon
-        );
-      }
+      // Note: Session storage for user-drawn polygon removed with PIN functionality
       
       // Clear drawing visualization
       clearDrawingVisualization();

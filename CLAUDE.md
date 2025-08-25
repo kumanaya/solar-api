@@ -2,95 +2,105 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Development Commands
+## Commands
 
-- `npm run dev` - Start Next.js development server with Turbopack
-- `npm run build` - Build production version
-- `npm run start` - Start production server
-- `npm run lint` - Run ESLint
-- `supabase start` - Start local Supabase stack
-- `supabase functions serve` - Serve edge functions locally
+```bash
+# Development
+npm run dev --turbopack    # Start development server with Turbopack
+npm run build              # Build the application
+npm start                  # Start production server
+npm run lint              # Run linting
+
+# Supabase Local Development
+cd supabase
+supabase start            # Start local Supabase stack
+supabase db reset         # Reset local database
+supabase functions serve  # Serve edge functions locally
+```
+
+# Project Instructions
+- Always use MCP
+- Whenever you create/edit a feature that inputs to the database, first check the table structure in the database with MCP to create columns if necessary.
+- Whenever you finish the feature, run npm run && npm lint to check for any errors that need fixing.
+- Don't use migrations
+- Before making any changes, understand the context in which they are applied.
+- Whenever you analyze the context, ask me the right questions to make the change.
 
 ## Architecture Overview
 
-This is a solar panel analysis application built with Next.js 15, Supabase, and TypeScript. The app analyzes addresses for solar panel viability using Google Solar API as primary source with PVGIS/NASA POWER as fallbacks.
+This is a solar analysis platform built with Next.js App Router and Supabase, specializing in solar panel feasibility analysis for residential and commercial properties.
 
-### Core Flow
-1. **Frontend**: User enters address → calls Supabase Edge Function
-2. **Edge Function** (`supabase/functions/analyze/index.ts`): 
-   - Authenticates via Supabase JWT
-   - Geocodes address (Google Maps API)
-   - Attempts Google Solar API analysis
-   - Falls back to PVGIS → NASA POWER if Google unavailable
-   - Returns deterministic analysis results
-3. **Frontend**: Displays results with interactive map using MapLibre GL
+### Tech Stack
+- **Framework**: Next.js 15 with App Router and Turbopack
+- **Backend**: Supabase (PostgreSQL, Edge Functions, Auth)
+- **State Management**: Zustand with persistence
+- **UI**: shadcn/ui components with Tailwind CSS
+- **Maps**: MapLibre GL for interactive mapping
+- **3D**: React Three Fiber for 3D visualizations
+
+### Core Architecture
+
+**Analysis Flow**:
+1. Address search and location selection (`components/analysis/address-search.tsx`)
+2. Interactive map with building footprint selection (`components/analysis/map-view.tsx`)
+3. Solar analysis processing via Supabase Edge Functions (`supabase/functions/analyze/`)
+4. Results display with technical calculations (`components/analysis/results-panel.tsx`)
+5. Financial modeling with technician inputs (`components/analysis/technician-inputs-panel.tsx`)
+
+**State Management**:
+- Global analysis state managed by Zustand store (`lib/stores/analysis-store.ts`)
+- Persistent duplicate data handling for analysis replication
+- Schema validation using Zod (`lib/types/analysis-schema.ts`)
+
+**Data Flow**:
+- Analysis data types defined in `lib/types/analysis.ts`
+- API integration through `lib/analysis-api.ts` and related API modules
+- Edge functions handle solar calculations and external API integrations
 
 ### Key Components
 
-**Authentication**
-- Cookie-based auth via `@supabase/ssr`
-- Protected routes redirect to `/auth/login`
-- Dashboard requires authenticated user
+**Analysis System**:
+- `AnalysisProvider`: Context wrapper for analysis state
+- `MapPanel`: Interactive map with drawing tools and footprint management
+- `ResultsPanel`: Solar production calculations and feasibility verdicts
+- `TechnicianInputsPanel`: Financial modeling inputs and advanced settings
 
-**Analysis System**
-- `AnalysisContext` manages state for current analysis
-- `lib/analysis-api.ts` handles edge function communication
-- Results include: usable area, irradiation, shading, production estimates, verdict
+**Dashboard**:
+- `DashboardAnalysesWrapper`: Main dashboard with analysis list
+- `AnalysisCards`: Reusable analysis display components
+- Credit system integration for usage tracking
 
-**UI Architecture**
-- App Router with nested layouts
-- `app/dashboard/layout.tsx` provides authenticated shell
-- `components/analysis/` contains analysis-specific components
-- `components/dashboard/` contains dashboard UI
-- shadcn/ui components with Tailwind CSS
-- Dark/light theme support via next-themes
+**Authentication**: 
+- Supabase Auth with cookie-based sessions
+- Route protection via middleware
+- Forms in `components/` directory (login, signup, etc.)
 
-**Map Integration**
-- MapLibre GL for interactive mapping
-- Address search with debounced geocoding
-- Drawing tools for custom footprints
-- Layer toggles for visualization
+### Supabase Integration
 
-### Edge Function Details
+**Database Schema**:
+- `building_footprints`: Geospatial building data
+- `solar_analyses`: Analysis results with versioning support
+- RLS policies for user data isolation
 
-The `analyze` function (`supabase/functions/analyze/index.ts`) is written in TypeScript for Deno and includes:
-- Zod schemas for request/response validation
-- Google Solar API integration (buildingInsights:findClosest)
-- PVGIS yield data fetching
-- NASA POWER GHI data fetching
-- Deterministic calculation algorithms
-- CORS handling for web requests
+**Edge Functions**:
+- `analyze`: Main solar analysis processing
+- `footprints`: Building footprint retrieval
+- `generate-pdf`: Report generation
+- `get-analysis`: Analysis data retrieval
+- Shared utilities in `supabase/functions/shared/`
 
-### Environment Variables
+**Local Development**:
+- Project ID: "solar-api"
+- Local ports: API (54321), DB (54322), Auth, Storage, Inbucket email testing
+- Edge functions use TypeScript with Deno runtime
 
-Required for edge function:
-- `GOOGLE_MAPS_API_KEY` - For geocoding and Solar API
-- `SUPABASE_URL` - Supabase project URL
-- `SUPABASE_ANON_KEY` - Supabase anonymous key
+### Data Validation
 
-Required for frontend:
-- `NEXT_PUBLIC_SUPABASE_URL` - Supabase project URL
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_OR_ANON_KEY` - Supabase anonymous key
-- `NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN` - MapLibre/Mapbox token (optional, falls back to OpenStreetMap)
-
-### Database Schema
-
-The app uses Supabase PostgreSQL with migrations in `supabase/migrations/`:
-- Building footprints table for Microsoft building data
-- Solar analyses table for storing analysis results
-
-### Key Files Structure
-
-- `app/` - Next.js app router pages
-- `components/` - React components organized by feature
-- `lib/` - Utilities and API clients
-- `supabase/` - Supabase configuration and edge functions
-- `components.json` - shadcn/ui configuration
+All analysis data is validated using Zod schemas with comprehensive error handling. The analysis store ensures data integrity and provides fallback mechanisms for invalid states.
 
 ### Development Notes
 
-- Uses React 19 with Next.js 15
-- TypeScript strict mode enabled
-- ESLint configuration for Next.js
-- Responsive design with mobile-first approach
-- Portuguese language interface (Brazilian market focus)
+- Uses schema validation extensively - always validate data updates through the store
+- Map interactions are complex - coordinate systems and footprint sources are carefully tracked
+- Financial calculations use configurable technician inputs with sensible defaults
+- The codebase supports analysis duplication with timestamp-based data sharing
