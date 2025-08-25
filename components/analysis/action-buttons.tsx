@@ -49,88 +49,107 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
       return;
     }
 
+    if (!data.id) {
+      setError('ID da análise não encontrado. A análise precisa ser executada primeiro.');
+      return;
+    }
+
     setIsSavingAnalysis(true);
     setError(null);
 
     try {
-      console.log('Saving analysis to database...');
+      console.log('Saving analysis adjustments to database...');
       console.log('Analysis data before saving:', JSON.stringify(data, null, 2));
       
       const supabase = createClient();
       
-      // Transform to new architecture format
-      const analysisDataToSave = {
-        address: selectedAddress || data.address,
-        coordinates: Array.isArray(data.coordinates) 
-          ? { lat: data.coordinates[1], lng: data.coordinates[0] }
-          : data.coordinates,
-        polygon: currentPolygon,
-        // Base analysis data from original analysis
-        base_usable_area: data.usableArea,
-        base_annual_irradiation: data.annualIrradiation,
-        base_shading_index: data.shadingIndex,
-        base_estimated_production: data.estimatedProduction,
-        confidence: data.confidence,
+      // Get current user
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Prepare analysis adjustments data for new architecture
+      const adjustmentData = {
+        analysis_id: data.id,
+        user_id: user.id,
+        // Basic analysis data from API
+        usable_area: data.usableArea,
+        area_source: data.areaSource,
+        annual_irradiation: data.annualIrradiation || data.annualGHI,
+        irradiation_source: data.irradiationSource,
+        shading_index: data.shadingIndex,
+        estimated_production: data.estimatedProduction,
         verdict: data.verdict,
-        reasons: data.reasons,
-        recommendations: data.recommendations,
-        warnings: data.warnings,
-        // Final calculated values (if technician inputs were used)
-        final_usable_area: data.technicianInputs?.panel_count ? data.usableArea : undefined,
-        final_estimated_production: data.technicianInputs?.panel_count ? data.estimatedProduction : undefined,
-        final_system_kwp: data.technicianInputs?.panel_count && data.technicianInputs?.panel_capacity_watts 
-          ? (data.technicianInputs.panel_count * data.technicianInputs.panel_capacity_watts) / 1000 
-          : undefined,
-        final_panel_count: data.technicianInputs?.panel_count || undefined,
-        final_panel_capacity_watts: data.technicianInputs?.panel_capacity_watts || undefined,
-        // Data objects
-        technicianInputs: data.technicianInputs,
-        financialData: data.financialData,
-        calculationParameters: data.technicianInputs ? {
-          dc_to_ac_conversion: data.technicianInputs.dc_to_ac_conversion,
-          annual_degradation_rate: data.technicianInputs.annual_degradation_rate,
-          system_lifetime_years: data.technicianInputs.system_lifetime_years,
-          discount_rate: data.technicianInputs.discount_rate,
-          annual_energy_cost_increase: data.technicianInputs.annual_energy_cost_increase
-        } : undefined
+        coordinates: JSON.stringify(data.coordinates),
+        margin_of_error: data.marginOfError,
+        // Suggested system config from API
+        suggested_panel_count: data.suggestedSystemConfig?.panel_count,
+        suggested_panel_power_watts: data.suggestedSystemConfig?.panel_power_watts,
+        suggested_panel_area_m2: data.suggestedSystemConfig?.panel_area_m2,
+        suggested_module_efficiency_percent: data.suggestedSystemConfig?.module_efficiency_percent,
+        suggested_occupied_area_m2: data.suggestedSystemConfig?.occupied_area_m2,
+        suggested_power_density_w_m2: data.suggestedSystemConfig?.power_density_w_m2,
+        suggested_area_utilization_percent: data.suggestedSystemConfig?.area_utilization_percent,
+        // Technician inputs (if any)
+        panel_count: data.technicianInputs?.panel_count,
+        panel_capacity_watts: data.technicianInputs?.panel_capacity_watts,
+        energy_cost_per_kwh: data.technicianInputs?.energy_cost_per_kwh,
+        installation_cost_per_watt: data.technicianInputs?.installation_cost_per_watt,
+        solar_incentives: data.technicianInputs?.solar_incentives,
+        system_lifetime_years: data.technicianInputs?.system_lifetime_years,
+        annual_energy_cost_increase: data.technicianInputs?.annual_energy_cost_increase,
+        discount_rate: data.technicianInputs?.discount_rate,
+        annual_degradation_rate: data.technicianInputs?.annual_degradation_rate,
+        additional_details: data.technicianInputs?.additional_details,
+        // Financial calculations (if available)
+        system_power_kw: data.financialData?.system_power_kw,
+        installation_cost_gross: data.financialData?.installation_cost_gross,
+        installation_cost_net: data.financialData?.installation_cost_net,
+        annual_savings_year_1: data.financialData?.annual_savings_year_1,
+        simple_payback_years: data.financialData?.simple_payback_years,
+        total_lifetime_savings: data.financialData?.total_lifetime_savings,
+        net_present_value: data.financialData?.net_present_value,
+        roi_percentage: data.financialData?.roi_percentage,
+        // Metadata
+        source: 'web_interface',
+        metadata: JSON.stringify({
+          reasons: data.reasons,
+          recommendations: data.recommendations,
+          warnings: data.warnings,
+          coverage: data.coverage,
+          api_cache_ids: data.apiCacheIds
+        })
       };
 
-      console.log('Prepared analysis data for new architecture:', JSON.stringify(analysisDataToSave, null, 2));
+      console.log('Prepared analysis adjustment data:', JSON.stringify(adjustmentData, null, 2));
 
-      const { data: saveResult, error } = await supabase.functions.invoke('save-analysis-v2', {
-        body: {
-          analysisData: analysisDataToSave
-        }
-      });
+      const { data: saveResult, error: saveError } = await supabase
+        .from('analysis_adjustments')
+        .insert([adjustmentData])
+        .select('id, created_at')
+        .single();
 
-      console.log('Save analysis result:', { saveResult, error });
-
-      if (error) {
-        console.error('Save analysis error:', error);
-        setError(error.message || 'Erro ao salvar análise');
+      if (saveError) {
+        console.error('Save analysis adjustments error:', saveError);
+        setError(saveError.message || 'Erro ao salvar análise');
         return;
       }
 
-      if (!saveResult.success) {
-        console.error('Save failed:', saveResult.error);
-        setError(saveResult.error || 'Erro ao salvar análise');
-        return;
-      }
-
-      // Update analysis data with database info
+      console.log('Analysis adjustments saved successfully:', saveResult);
+      
+      // Update analysis data with adjustment info
       updateData({
         ...data,
-        id: saveResult.data.id,
-        createdAt: saveResult.data.createdAt
+        adjustmentId: saveResult.id,
+        savedAt: saveResult.created_at
       });
 
-      console.log('Analysis saved successfully:', saveResult.data);
-      
       // Redirect to analysis detail page
-      router.push(`/dashboard/analysis/${saveResult.data.id}`);
+      router.push(`/dashboard/analysis/${data.id}`);
 
     } catch (error) {
-      console.error('Save analysis error:', error);
+      console.error('Save analysis adjustments error:', error);
       setError(error instanceof Error ? error.message : 'Erro inesperado ao salvar análise');
     } finally {
       setIsSavingAnalysis(false);
@@ -422,18 +441,18 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
         <Button 
           onClick={handleRunAnalysis}
           className="w-full"
-          disabled={!canAnalyze || isAnalyzing || !!data.id}
+          disabled={!canAnalyze || isAnalyzing}
         >
           {isAnalyzing ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : (
             <Zap className="mr-2 h-4 w-4" />
           )}
-          {data.id ? 'Análise Salva' : (isAnalyzing ? 'Analisando...' : 'Executar Análise')}
+          {data.adjustmentId ? 'Análise Salva' : (isAnalyzing ? 'Analisando...' : 'Executar Análise')}
         </Button>
 
         {/* Botão Salvar Análise - apenas após análise ser executada e não foi salva ainda */}
-        {data.estimatedProduction > 0 && !data.id && (
+        {data.estimatedProduction > 0 && data.id && !data.adjustmentId && (
           <Button 
             variant="secondary"
             onClick={handleSaveAnalysis}

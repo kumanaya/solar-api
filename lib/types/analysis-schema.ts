@@ -34,6 +34,7 @@ export const FootprintSchema = z.object({
 export const AnalysisSchema = z.object({
   // Base data
   id: z.string().optional(),
+  adjustmentId: z.string().optional(),
   address: z.string(),
   coordinates: CoordinatesSchema,
   
