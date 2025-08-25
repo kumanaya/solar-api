@@ -122,7 +122,7 @@ export function TechnicalResults() {
   } : data;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-3xl mx-auto">
       {/* Technician Inputs Panel - First after analysis */}
       {hasAnalysisResults && (
         <TechnicianInputsPanel

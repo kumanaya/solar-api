@@ -143,7 +143,7 @@ export function TechnicianInputsPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* System Configuration */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="panel_count" className="flex items-center gap-2">
               <Zap className="h-4 w-4" />
@@ -182,7 +182,7 @@ export function TechnicianInputsPanel({
             Parâmetros Financeiros
           </h4>
           
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="energy_cost">Custo da Energia (R$/kWh)</Label>
               <Input
@@ -241,7 +241,7 @@ export function TechnicianInputsPanel({
 
         {inputs.show_advanced_settings && (
           <div className="space-y-4 p-4 bg-muted/50 rounded-lg">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="system_lifetime">
                   <Clock className="h-4 w-4 inline mr-1" />
