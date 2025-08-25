@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { AddressSearch } from "./address-search";
 import { MapView } from "./map-view";
 import { DrawingToolbar } from "./drawing-toolbar";
@@ -10,11 +10,11 @@ import { MapLibreMapRef } from "./maplibre-map";
 import { useAnalysis } from "./analysis-context";
 
 interface MapPanelProps {
-  mapRef: React.RefObject<MapLibreMapRef>;
+  mapRef: React.RefObject<MapLibreMapRef | null>;
 }
 
 export function MapPanel({ mapRef }: MapPanelProps) {
-  const { data: _data, hasAnalysisResults: _hasAnalysisResults } = useAnalysis();
+  const { } = useAnalysis();
   
   // Debug da referência do mapa
   useEffect(() => {

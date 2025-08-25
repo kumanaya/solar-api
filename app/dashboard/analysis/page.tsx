@@ -16,7 +16,7 @@ export default function AnalysisPage() {
   const [isSmallScreen, setIsSmallScreen] = useState(false);
   
   // Shared map reference
-  const mapRef = useRef<MapLibreMapRef>(null);
+  const mapRef = useRef<MapLibreMapRef | null>(null);
 
   // Initialize duplicate data if available
   useDuplicateInitialization();

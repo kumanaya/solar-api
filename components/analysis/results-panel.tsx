@@ -10,13 +10,13 @@ import { useErrorHandler } from "@/lib/hooks/use-error-handler";
 import { MapLibreMapRef } from "./maplibre-map";
 
 interface ResultsPanelProps {
-  mapRef: React.RefObject<MapLibreMapRef>;
+  mapRef: React.RefObject<MapLibreMapRef | null>;
 }
 
 export function ResultsPanel({ mapRef }: ResultsPanelProps) {
-  const { data, error, hasCredits, selectedAddress, updateData, setIsLoading, setError, isLoading, setHasAnalysisResults, hasAnalysisResults } = useAnalysis();
+  const { data, error, hasCredits, selectedAddress, hasAnalysisResults } = useAnalysis();
   
-  const { isFootprintError } = useErrorHandler();
+  const { } = useErrorHandler();
   
   // Function to determine if error should be hidden from banner
   const shouldHideErrorFromBanner = (errorMessage: string | null): boolean => {

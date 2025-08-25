@@ -30,7 +30,7 @@ interface PDFModalProps {
   isOpen: boolean;
   onClose: () => void;
   analysisData?: Analysis;
-  mapRef?: React.RefObject<MapLibreMapRef>;
+  mapRef?: React.RefObject<MapLibreMapRef | null>;
 }
 
 type Language = "pt-BR" | "en" | "es";
@@ -112,7 +112,7 @@ export function PDFModal({ isOpen, onClose, analysisData, mapRef }: PDFModalProp
     
     try {
       // Capturar imagem do mapa
-      const mapImage = mapRef?.current ? await mapRef.current.captureMapImage() : null;
+      const mapImage = mapRef?.current?.captureMapImage ? await mapRef.current.captureMapImage() : null;
       setProgress(10);
 
       // Get current session token

@@ -27,7 +27,20 @@ interface TechnicianInputs {
 export function TechnicianInputsPanel() {
   const { data, updateData } = useAnalysis();
   const [localInputs, setLocalInputs] = useState<TechnicianInputs>(
-    data.technicianInputs || {
+    data.technicianInputs ? {
+      panel_count: data.technicianInputs.panel_count ?? null,
+      energy_cost_per_kwh: data.technicianInputs.energy_cost_per_kwh ?? null,
+      solar_incentives: data.technicianInputs.solar_incentives ?? null,
+      installation_cost_per_watt: data.technicianInputs.installation_cost_per_watt ?? null,
+      panel_capacity_watts: data.technicianInputs.panel_capacity_watts ?? null,
+      show_advanced_settings: data.technicianInputs.show_advanced_settings ?? false,
+      additional_details: data.technicianInputs.additional_details ?? null,
+      system_lifetime_years: data.technicianInputs.system_lifetime_years ?? 25,
+      dc_to_ac_conversion: data.technicianInputs.dc_to_ac_conversion ?? 0.96,
+      annual_degradation_rate: data.technicianInputs.annual_degradation_rate ?? 0.6,
+      annual_energy_cost_increase: data.technicianInputs.annual_energy_cost_increase ?? 5.0,
+      discount_rate: data.technicianInputs.discount_rate ?? 6.0,
+    } : {
       panel_count: null,
       energy_cost_per_kwh: null,
       solar_incentives: null,
@@ -45,7 +58,7 @@ export function TechnicianInputsPanel() {
 
   const [showAdvanced, setShowAdvanced] = useState(localInputs.show_advanced_settings);
 
-  const handleInputChange = (field: keyof TechnicianInputs, value: any) => {
+  const handleInputChange = (field: keyof TechnicianInputs, value: string | number | boolean | null) => {
     const newInputs = { ...localInputs, [field]: value };
     setLocalInputs(newInputs);
     

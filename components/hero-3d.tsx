@@ -18,7 +18,7 @@ function SpinningCity({
   url: string;
   autoRotate: boolean;
 }) {
-  const ref = useRef<any>(null);
+  const ref = useRef<THREE.Group>(null);
   const { scene } = useGLTF(url);
 
   useFrame(() => {

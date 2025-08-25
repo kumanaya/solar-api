@@ -96,6 +96,18 @@ export const AnalysisSchema = z.object({
     discount_rate: z.number().nullable().optional()
   }).optional(),
   
+  // Financial analysis results from dynamic calculations
+  financialData: z.object({
+    system_power_kw: z.number(),
+    installation_cost_gross: z.number(),
+    installation_cost_net: z.number(),
+    annual_savings_year_1: z.number(),
+    simple_payback_years: z.number(),
+    total_lifetime_savings: z.number(),
+    net_present_value: z.number(),
+    roi_percentage: z.number(),
+  }).optional(),
+  
   // Metadata
   createdAt: z.string().optional(),
   

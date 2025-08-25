@@ -68,8 +68,6 @@ export function LayerToggles({
   onReliefToggle,
   showDataLayers,
   onDataLayersToggle,
-  selectedDataLayer: _selectedDataLayer,
-  onDataLayerSelect: _onDataLayerSelect,
   hasPin = false
 }: LayerTogglesProps) {
   

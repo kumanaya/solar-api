@@ -17,7 +17,13 @@ interface AnalysisState {
       coordinates: number[][][];
       source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
     } | null;
-    footprints: any[];
+    footprints: Array<{
+      id: string;
+      coordinates: [number, number][];
+      area: number;
+      isActive: boolean;
+      source?: string;
+    }>;
     timestamp: number;
   } | null;
   setDuplicateData: (data: AnalysisState['duplicateData']) => void;

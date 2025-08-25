@@ -186,7 +186,10 @@ export function TechnicalPanel() {
 
           <SystemConfigCard 
             usableArea={cv.usableArea} 
-            technicianInputs={cv.technicianInputs}
+            technicianInputs={analysis.technicianInputs ? {
+              panel_count: analysis.technicianInputs.panel_count ?? undefined,
+              panel_capacity_watts: analysis.technicianInputs.panel_capacity_watts ?? undefined,
+            } : undefined}
             isLocked={true} 
           />
 

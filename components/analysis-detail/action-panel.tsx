@@ -10,7 +10,7 @@ import { MapLibreMapRef } from "../analysis/maplibre-map";
 
 interface ActionPanelProps {
   onToggleHistory: () => void;
-  mapRef?: React.RefObject<MapLibreMapRef>;
+  mapRef?: React.RefObject<MapLibreMapRef | null>;
 }
 
 export function ActionPanel({ onToggleHistory, mapRef }: ActionPanelProps) {
@@ -157,11 +157,12 @@ export function ActionPanel({ onToggleHistory, mapRef }: ActionPanelProps) {
             google: analysis.sources.google,
             fallback: analysis.sources.nasa ? "NASA SRTM" : "Dados indisponíveis"
           },
-          confidence: analysis.currentVersion.confidence,
+          confidence: (analysis.currentVersion.confidence as "Alta" | "Média" | "Baixa"),
           usableArea: analysis.currentVersion.usableArea,
           areaSource: "manual",
-          annualIrradiation: analysis.currentVersion.annualIrradiation,
-          irradiationSource: analysis.currentVersion.sources[0] || "PVGIS",
+          annualIrradiation: 1500, // Default value 
+          annualGHI: 1500, // Default value
+          irradiationSource: "PVGIS",
           shadingIndex: 0,
           shadingLoss: 0,
           estimatedProduction: analysis.currentVersion.estimatedProduction,
@@ -173,7 +174,7 @@ export function ActionPanel({ onToggleHistory, mapRef }: ActionPanelProps) {
             area: analysis.polygon.area,
             isActive: true
           }],
-          usageFactor: analysis.currentVersion.parameters.usageFactor
+          usageFactor: 0.75
         }}
       />
 

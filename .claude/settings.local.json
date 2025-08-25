@@ -12,7 +12,10 @@
       "Bash(npm run dev:*)",
       "WebSearch",
       "WebSearch",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "mcp__supabase__deploy_edge_function",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)"
     ],
     "additionalDirectories": [
       "C:\\c\\Users\\danie\\Desktop\\www\\kumanaya"

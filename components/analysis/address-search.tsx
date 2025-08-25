@@ -180,7 +180,7 @@ export function AddressSearch() {
           
           // Se for busca por número, tentar encontrar o melhor resultado
           if (isJustNumber && data.length > 1) {
-            const filtered = data.filter(item => {
+            const filtered = data.filter((item: AddressSuggestion) => {
               const displayName = item.display_name.toLowerCase();
               const numberPattern = new RegExp(`(^|[,\\s])${searchQuery}(\\s|,|$)`, 'i');
               return numberPattern.test(displayName);

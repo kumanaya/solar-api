@@ -18,7 +18,7 @@ export default function AnalysisDetailPage() {
   const [showHistory, setShowHistory] = useState(false);
   
   // Shared map reference for PDF generation
-  const mapRef = useRef<MapLibreMapRef>(null);
+  const mapRef = useRef<MapLibreMapRef | null>(null);
 
   useEffect(() => {
     // Simular carregamento dos dados da análise

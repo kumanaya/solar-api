@@ -190,7 +190,7 @@ export function HistoryTimeline({ onClose }: HistoryTimelineProps) {
                     </div>
                     <div>
                       <p className="text-muted-foreground">Irradiação</p>
-                      <p className="font-medium">{version.annualIrradiation} kWh/m²</p>
+                      <p className="font-medium">{version.annualGHI} kWh/m²</p>
                     </div>
                   </div>
 

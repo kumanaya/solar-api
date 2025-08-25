@@ -105,7 +105,7 @@ export function AnalysisHeader() {
           <div className="flex items-center space-x-2">
             <span className="text-sm font-medium text-muted-foreground">Fontes:</span>
             <div className="flex flex-wrap gap-1">
-              {analysis.currentVersion.sources.map((source) => (
+              {analysis.currentVersion.sources?.map((source) => (
                 <Badge 
                   key={source}
                   variant="outline" 

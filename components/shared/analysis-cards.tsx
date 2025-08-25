@@ -1084,7 +1084,15 @@ export interface TechnicianInputsCardProps {
     show_advanced_settings?: boolean;
     additional_details?: string | null;
   };
-  onTechnicianInputsChange?: (inputs: any) => void;
+  onTechnicianInputsChange?: (inputs: {
+    panel_count?: number | null;
+    energy_cost_per_kwh?: number | null;
+    solar_incentives?: number | null;
+    installation_cost_per_watt?: number | null;
+    panel_capacity_watts?: number | null;
+    show_advanced_settings?: boolean;
+    additional_details?: string | null;
+  }) => void;
   isEditable?: boolean;
   isLocked?: boolean;
 }
@@ -1098,7 +1106,7 @@ export function TechnicianInputsCard({
   const [localInputs, setLocalInputs] = useState(technicianInputs);
   const [showAdvanced, setShowAdvanced] = useState(technicianInputs.show_advanced_settings || false);
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string | number | boolean | null) => {
     const newInputs = { ...localInputs, [field]: value };
     setLocalInputs(newInputs);
     if (onTechnicianInputsChange) {
@@ -1316,12 +1324,23 @@ export interface FinancialAnalysisCardProps {
     discount_rate?: number | null;
   };
   estimatedProduction?: number;
+  financialData?: {
+    system_power_kw: number;
+    installation_cost_gross: number;
+    installation_cost_net: number;
+    annual_savings_year_1: number;
+    simple_payback_years: number;
+    total_lifetime_savings: number;
+    net_present_value: number;
+    roi_percentage: number;
+  };
   isLocked?: boolean;
 }
 
 export function FinancialAnalysisCard({
   technicianInputs,
   estimatedProduction = 0,
+  financialData,
   isLocked = false,
 }: FinancialAnalysisCardProps) {
   if (!technicianInputs || !technicianInputs.panel_count || !technicianInputs.energy_cost_per_kwh) {
@@ -1339,46 +1358,60 @@ export function FinancialAnalysisCard({
     return new Intl.NumberFormat('pt-BR').format(Math.round(value));
   };
 
-  // Cálculos financeiros
-  const systemPowerKw = (technicianInputs.panel_count * (technicianInputs.panel_capacity_watts || 0)) / 1000;
-  const installationCost = technicianInputs.installation_cost_per_watt 
-    ? technicianInputs.panel_count * (technicianInputs.panel_capacity_watts || 0) * technicianInputs.installation_cost_per_watt
-    : 0;
-  
-  const finalInstallationCost = technicianInputs.solar_incentives 
-    ? installationCost * (1 - technicianInputs.solar_incentives / 100)
-    : installationCost;
+  // Use financial data from dynamic calculations if available, otherwise calculate locally
+  let systemPowerKw, installationCost, finalInstallationCost, annualSavings, paybackYears, totalSavings, netPresentValue;
 
-  // Economia anual baseada na produção estimada
-  const annualSavings = estimatedProduction * (technicianInputs.energy_cost_per_kwh || 0);
-  
-  // Payback simples
-  const paybackYears = finalInstallationCost > 0 && annualSavings > 0 
-    ? finalInstallationCost / annualSavings 
-    : 0;
-
-  // Cálculos avançados se tiver parâmetros
-  const lifetimeYears = technicianInputs.system_lifetime_years || 25;
-  const annualEnergyIncrease = (technicianInputs.annual_energy_cost_increase || 0) / 100;
-  const discountRate = (technicianInputs.discount_rate || 0) / 100;
-  const degradationRate = (technicianInputs.annual_degradation_rate || 0) / 100;
-
-  // VPL (Valor Presente Líquido) - cálculo básico
-  let totalSavings = 0;
-  let netPresentValue = -finalInstallationCost;
-
-  for (let year = 1; year <= lifetimeYears; year++) {
-    // Produção com degradação
-    const yearlyProduction = estimatedProduction * Math.pow(1 - degradationRate, year - 1);
-    // Custo da energia com aumento anual
-    const yearlyEnergyCost = (technicianInputs.energy_cost_per_kwh || 0) * Math.pow(1 + annualEnergyIncrease, year - 1);
-    // Economia do ano
-    const yearlySavings = yearlyProduction * yearlyEnergyCost;
-    // Valor presente da economia
-    const presentValue = yearlySavings / Math.pow(1 + discountRate, year);
+  if (financialData) {
+    // Use data from dynamic calculations
+    systemPowerKw = financialData.system_power_kw;
+    installationCost = financialData.installation_cost_gross;
+    finalInstallationCost = financialData.installation_cost_net;
+    annualSavings = financialData.annual_savings_year_1;
+    paybackYears = financialData.simple_payback_years;
+    totalSavings = financialData.total_lifetime_savings;
+    netPresentValue = financialData.net_present_value;
+  } else {
+    // Fallback to local calculations
+    systemPowerKw = (technicianInputs.panel_count * (technicianInputs.panel_capacity_watts || 0)) / 1000;
+    installationCost = technicianInputs.installation_cost_per_watt 
+      ? technicianInputs.panel_count * (technicianInputs.panel_capacity_watts || 0) * technicianInputs.installation_cost_per_watt
+      : 0;
     
-    totalSavings += yearlySavings;
-    netPresentValue += presentValue;
+    finalInstallationCost = technicianInputs.solar_incentives 
+      ? installationCost * (1 - technicianInputs.solar_incentives / 100)
+      : installationCost;
+
+    // Economia anual baseada na produção estimada
+    annualSavings = estimatedProduction * (technicianInputs.energy_cost_per_kwh || 0);
+    
+    // Payback simples
+    paybackYears = finalInstallationCost > 0 && annualSavings > 0 
+      ? finalInstallationCost / annualSavings 
+      : 0;
+
+    // Cálculos avançados se tiver parâmetros
+    const lifetimeYears = technicianInputs.system_lifetime_years || 25;
+    const annualEnergyIncrease = (technicianInputs.annual_energy_cost_increase || 0) / 100;
+    const discountRate = (technicianInputs.discount_rate || 0) / 100;
+    const degradationRate = (technicianInputs.annual_degradation_rate || 0) / 100;
+
+    // VPL (Valor Presente Líquido) - cálculo básico
+    totalSavings = 0;
+    netPresentValue = -finalInstallationCost;
+
+    for (let year = 1; year <= lifetimeYears; year++) {
+      // Produção com degradação
+      const yearlyProduction = estimatedProduction * Math.pow(1 - degradationRate, year - 1);
+      // Custo da energia com aumento anual
+      const yearlyEnergyCost = (technicianInputs.energy_cost_per_kwh || 0) * Math.pow(1 + annualEnergyIncrease, year - 1);
+      // Economia do ano
+      const yearlySavings = yearlyProduction * yearlyEnergyCost;
+      // Valor presente da economia
+      const presentValue = yearlySavings / Math.pow(1 + discountRate, year);
+      
+      totalSavings += yearlySavings;
+      netPresentValue += presentValue;
+    }
   }
 
   return (
@@ -1447,8 +1480,8 @@ export function FinancialAnalysisCard({
           </div>
         </div>
 
-        {/* VPL se tiver parâmetros avançados */}
-        {(discountRate > 0 || annualEnergyIncrease > 0 || degradationRate > 0) && (
+        {/* VPL se tiver parâmetros avançados ou dados dinâmicos */}
+        {(financialData || (technicianInputs.discount_rate && technicianInputs.discount_rate > 0)) && (
           <div className="bg-purple-50 p-3 rounded-md border border-purple-200">
             <h4 className="font-semibold text-purple-800 mb-2">Análise Avançada</h4>
             <div className="space-y-2 text-sm">
@@ -1458,11 +1491,19 @@ export function FinancialAnalysisCard({
                   {formatCurrency(netPresentValue)}
                 </span>
               </div>
-              <div className="text-xs text-muted-foreground mt-2">
-                <div>• Taxa de desconto: {(discountRate * 100).toFixed(1)}%/ano</div>
-                <div>• Aumento energia: {(annualEnergyIncrease * 100).toFixed(1)}%/ano</div>
-                <div>• Degradação painéis: {(degradationRate * 100).toFixed(1)}%/ano</div>
-              </div>
+              {financialData?.roi_percentage && (
+                <div className="flex justify-between">
+                  <span>ROI Total:</span>
+                  <span className="font-medium text-green-600">{financialData.roi_percentage.toFixed(1)}%</span>
+                </div>
+              )}
+              {!financialData && (
+                <div className="text-xs text-muted-foreground mt-2">
+                  <div>• Taxa de desconto: {((technicianInputs.discount_rate || 0) / 100 * 100).toFixed(1)}%/ano</div>
+                  <div>• Aumento energia: {((technicianInputs.annual_energy_cost_increase || 0) / 100 * 100).toFixed(1)}%/ano</div>
+                  <div>• Degradação painéis: {((technicianInputs.annual_degradation_rate || 0) / 100 * 100).toFixed(1)}%/ano</div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1470,11 +1511,15 @@ export function FinancialAnalysisCard({
         {/* Indicadores */}
         <div className="grid grid-cols-3 gap-2 text-xs">
           <div className="text-center p-2 bg-muted rounded">
-            <div className="font-semibold">{(annualSavings / finalInstallationCost * 100).toFixed(1)}%</div>
+            <div className="font-semibold">
+              {finalInstallationCost > 0 ? (annualSavings / finalInstallationCost * 100).toFixed(1) + '%' : 'N/A'}
+            </div>
             <div className="text-muted-foreground">ROI Ano 1</div>
           </div>
           <div className="text-center p-2 bg-muted rounded">
-            <div className="font-semibold">{formatNumber(estimatedProduction / systemPowerKw)}</div>
+            <div className="font-semibold">
+              {systemPowerKw > 0 ? formatNumber(estimatedProduction / systemPowerKw) : 'N/A'}
+            </div>
             <div className="text-muted-foreground">kWh/kWp/ano</div>
           </div>
           <div className="text-center p-2 bg-muted rounded">

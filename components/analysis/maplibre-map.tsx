@@ -24,6 +24,7 @@ export interface MapLibreMapRef {
   getDrawingCoordinates: () => [number, number][];
   reopenPolygon: () => void;
   clearPin: () => void;
+  captureMapImage?: () => Promise<string | null>;
 }
 
 // Move function outside component to avoid re-creation
@@ -87,7 +88,6 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     address: string;
     isUserPlaced: boolean;
   } | null>(null);
-  const [currentDataLayer, setCurrentDataLayer] = useState<string | null>(null);
   
   // Polygon drawing state (back to local state)
   const [drawingCoordinates, setDrawingCoordinates] = useState<[number, number][]>([]);
@@ -242,7 +242,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       setSelectedAddress('');
       updateData({
         address: '',
-        coordinates: null,
+        coordinates: undefined,
         footprints: [],
         usableArea: 0,
         areaSource: 'manual' as const
@@ -275,8 +275,9 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     };
 
     // Check if coordinates are the default São Paulo coordinates (not user-set)
-    const isDefaultCoordinates = data.coordinates[0] === -46.6333 && data.coordinates[1] === -23.5505;
-    const hasValidUserCoordinates = data.coordinates[0] && data.coordinates[1] && !isDefaultCoordinates;
+    const isDefaultCoordinates = Array.isArray(data.coordinates) ? 
+      data.coordinates[0] === -46.6333 && data.coordinates[1] === -23.5505 :
+      data.coordinates?.lng === -46.6333 && data.coordinates?.lat === -23.5505;
 
     // Try to get user's geolocation first if coordinates are still default
     if (navigator.geolocation && isDefaultCoordinates) {
@@ -302,7 +303,9 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
       );
     } else {
       // Use existing coordinates (either user-set or default São Paulo)
-      const center: [number, number] = [data.coordinates[0], data.coordinates[1]];
+      const center: [number, number] = Array.isArray(data.coordinates) ? 
+        [data.coordinates[0], data.coordinates[1]] :
+        [data.coordinates?.lng ?? -46.6333, data.coordinates?.lat ?? -23.5505];
       initializeMap(center);
     }
 
@@ -347,7 +350,8 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   useEffect(() => {
     if (!map.current || !isMapLoaded || !data.coordinates) return;
     
-    const [lng, lat] = data.coordinates;
+    const lng = Array.isArray(data.coordinates) ? data.coordinates[0] : data.coordinates?.lng;
+    const lat = Array.isArray(data.coordinates) ? data.coordinates[1] : data.coordinates?.lat;
     if (isNaN(lng) || isNaN(lat)) return;
     
     // Skip if coordinates are the default São Paulo coordinates (not user-generated)
@@ -639,7 +643,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
     const savedPin = loadPinFromStorage();
     // Only load saved pin if we have a selected address or it's not default coordinates
     if (savedPin && savedPin.coordinates && savedPin.address && 
-        (data.address || (data.coordinates[0] !== -46.6333 && data.coordinates[1] !== -23.5505))) {
+        (data.address || (Array.isArray(data.coordinates) ? (data.coordinates[0] !== -46.6333 && data.coordinates[1] !== -23.5505) : (data.coordinates?.lng !== -46.6333 && data.coordinates?.lat !== -23.5505)))) {
       console.log('Loading saved pin from storage:', savedPin);
       const [lng, lat] = savedPin.coordinates;
       
@@ -669,26 +673,32 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
         const polygonCoords = savedPin.polygon.coordinates[0];
         if (polygonCoords && polygonCoords.length > 0) {
           // Convert to [lng, lat] format and calculate area
-          const coords = polygonCoords.map(coord => [coord[0], coord[1]] as [number, number]);
+          const coords = polygonCoords.map((coord: [number, number]) => [coord[0], coord[1]] as [number, number]);
           const area = calculatePolygonArea(coords);
           addFinishedPolygonVisualization(coords, Math.round(area));
         }
       }
       
       // Update context data for analysis to work
-      const contextData: any = {
+      const contextData = {
         address: savedPin.address,
         coordinates: [lng, lat] as [number, number],
-        footprints: [],
+        footprints: [] as Array<{
+          id: string;
+          coordinates: [number, number][];
+          area: number;
+          isActive: boolean;
+          source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
+        }>,
         usableArea: 0,
-        areaSource: 'manual' as const
+        areaSource: 'manual' as "google" | "footprint" | "manual" | "estimate"
       };
       
       // If we have polygon data, create footprint from it
       if (savedPin.polygon) {
         const polygonCoords = savedPin.polygon.coordinates[0];
         if (polygonCoords && polygonCoords.length > 0) {
-          const coords = polygonCoords.map(coord => [coord[0], coord[1]] as [number, number]);
+          const coords = polygonCoords.map((coord: [number, number]) => [coord[0], coord[1]] as [number, number]);
           const area = calculatePolygonArea(coords);
           
           contextData.footprints = [{
@@ -696,7 +706,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
             coordinates: coords,
             area: Math.round(area),
             isActive: true,
-            source: savedPin.polygon.source || 'user-drawn'
+            source: (savedPin.polygon.source as "user-drawn" | "microsoft-footprint" | "google-footprint") || 'user-drawn'
           }];
           contextData.usableArea = Math.round(area * 0.75);
           contextData.areaSource = savedPin.polygon.source === 'user-drawn' ? 'manual' : 'footprint';
@@ -726,7 +736,6 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
 
   const removeDataLayer = () => {
     // Mock function - does nothing
-    setCurrentDataLayer(null);
   };
 
 
@@ -892,7 +901,7 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
           map.current!.getCanvas().style.cursor = 'crosshair';
           map.current!.getCanvas().title = '';
         }
-      } catch (error) {
+      } catch {
         // Fallback to default cursor if there's an error
         map.current!.getCanvas().style.cursor = drawingMode ? 'crosshair' : 'default';
         map.current!.getCanvas().title = '';
@@ -1016,11 +1025,6 @@ export const MapLibreMap = forwardRef<MapLibreMapRef, MapLibreMapProps>(({ layer
   }, [drawingMode, isDrawingMode, isMapLoaded]);
 
   // Helper function to calculate distance between two points in degrees
-  const calculateDistance = (point1: [number, number], point2: [number, number]): number => {
-    const [lng1, lat1] = point1;
-    const [lng2, lat2] = point2;
-    return Math.sqrt(Math.pow(lng2 - lng1, 2) + Math.pow(lat2 - lat1, 2));
-  };
 
   // Helper function to calculate polygon area
   const calculatePolygonArea = (coords: [number, number][]): number => {

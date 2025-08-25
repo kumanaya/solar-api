@@ -4,9 +4,11 @@ export interface Coverage {
 }
 
 export interface Footprint {
+  id: string;
+  coordinates: [number, number][];
   area: number;
   isActive: boolean;
-  source?: string;
+  source?: "user-drawn" | "microsoft-footprint" | "google-footprint" | string;
 }
 
 export interface AnalysisVersion {
@@ -42,7 +44,7 @@ export interface DetailedAnalysis {
   warnings?: string[];
   reasons: string[];
   technicalNote?: string;
-  googleSolarData?: any;
+  googleSolarData?: Record<string, unknown>;
   technicianInputs?: {
     panel_count?: number | null;
     energy_cost_per_kwh?: number | null;

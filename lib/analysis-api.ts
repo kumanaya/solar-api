@@ -2,133 +2,71 @@ import { createClient } from "@/lib/supabase/client";
 import { ERROR_CODES, createApiError, detectErrorCode } from "@/lib/shared/error-codes";
 
 interface AnalysisRequest {
-  address: string;
   lat: number;
   lng: number;
-  polygon: {
+  polygon?: {
     type: "Polygon";
     coordinates: number[][][]; // [lng,lat]
-    source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
-  }; // Now required
-  usableAreaOverride?: number; // m²
-  technicianInputs?: {
-    panel_count?: number | null;
-    energy_cost_per_kwh?: number | null;
-    solar_incentives?: number | null;
-    installation_cost_per_watt?: number | null;
-    panel_capacity_watts?: number | null;
-    show_advanced_settings?: boolean;
-    additional_details?: string | null;
-    system_lifetime_years?: number | null;
-    dc_to_ac_conversion?: number | null;
-    annual_degradation_rate?: number | null;
-    annual_energy_cost_increase?: number | null;
-    discount_rate?: number | null;
   };
 }
 
 interface AnalysisResponse {
   success: boolean;
   data?: {
-    id?: string;
-    address: string;
-    coordinates: {
-      lat: number;
-      lng: number;
-    };
-    coverage: {
-      google: boolean;
-      fallback?: string;
-      dataQuality?: 'measured' | 'calculated' | 'estimated';
-    };
-    confidence: 'Alta' | 'Média' | 'Baixa';
-    usableArea: number;
-    areaSource: 'google' | 'estimate' | 'footprint' | 'manual';
-    annualIrradiation: number;
-    irradiationSource: string;
-    shadingIndex: number;
-    shadingLoss: number;
-    shadingSource?: 'google_measured' | 'user_input' | 'description' | 'heuristic';
-    estimatedProduction: number;
-    estimatedProductionAC?: number;
-    estimatedProductionDC?: number;
-    estimatedProductionYear1?: number;
-    estimatedProductionYear25?: number;
-    temperatureLosses?: number;
-    degradationFactor?: number;
-    effectivePR?: number;
+    id: string;
+    coordinates: [number, number];
+    usable_area: number;
+    area_source: string;
+    annual_irradiation: number;
+    irradiation_source: string;
+    shading_index: number;
+    estimated_production: number;
     verdict: 'Apto' | 'Parcial' | 'Não apto';
     reasons: string[];
     recommendations?: string[];
     warnings?: string[];
-    footprints: Array<{
-      id: string;
-      coordinates: [number, number][];
-      area: number;
-      isActive: boolean;
-      source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
-    }>;
-    usageFactor: number;
-    googleSolarData?: object;
-    technicalNote?: string;
-    createdAt?: string;
-    updatedAt?: string;
-    customPolygon?: {
-      type: "Polygon";
-      coordinates: number[][][];
-      source?: "user-drawn" | "microsoft-footprint" | "google-footprint";
+    coverage: {
+      google: boolean;
+      pvgis: boolean;
+      nasa: boolean;
     };
-    // New API tracking fields
-    apiSourcesUsed?: string[];
-    apiResponseTimes?: { [key: string]: number };
-    apiErrors?: { [key: string]: string };
-    fallbackReasons?: string[];
-    nasaPowerData?: object;
-    pvgisData?: object;
-    financialData?: {
-      totalSystemCost: number;
-      netSystemCost: number;
-      totalSystemWatts: number;
-      annualSavings: number;
-      simplePaybackYears: number;
-      npv: number;
-      roi: number;
-      totalLifetimeSavings: number;
-      incentivesApplied: number;
+    api_cache_ids: {
+      google: string | null;
+      pvgis: string | null;
+      nasa: string | null;
     };
+  };
+  metadata?: {
+    version: string;
+    timestamp: string;
+    location: string;
   };
   error?: string;
   errorCode?: string;
 }
 
 export async function analyzeAddress(
-  address: string,
   lat: number,
   lng: number, 
-  polygon: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" },
-  usableAreaOverride?: number,
-  technicianInputs?: any
+  polygon?: { type: "Polygon"; coordinates: number[][][]; source?: "user-drawn" | "microsoft-footprint" | "google-footprint" }
 ): Promise<AnalysisResponse> {
   try {
     const supabase = createClient();
     
-    // Call the edge function (Supabase client handles auth automatically)
-    console.log('Calling edge function with coordinates:', { address, lat, lng });
+    // Call the simplified edge function
+    console.log('Calling simplified edge function with coordinates:', { lat, lng });
     
     const requestBody: AnalysisRequest = { 
-      address, 
       lat, 
-      lng, 
-      polygon,
-      technicianInputs
+      lng
     };
     
-    console.log('Including polygon in analysis request:', polygon);
-    
-    // Add usable area override if provided
-    if (usableAreaOverride && usableAreaOverride > 0) {
-      requestBody.usableAreaOverride = usableAreaOverride;
-      console.log('Including usable area override in analysis request:', usableAreaOverride);
+    if (polygon) {
+      requestBody.polygon = {
+        type: polygon.type,
+        coordinates: polygon.coordinates
+      };
+      console.log('Including polygon in analysis request:', polygon);
     }
     
     const { data, error } = await supabase.functions.invoke('analyze', {
@@ -222,67 +160,32 @@ export async function analyzeAddress(
   }
 }
 
-// Function to transform API response to frontend format
+// Function to transform simplified API response to basic analysis data
 export function transformAnalysisData(apiData: AnalysisResponse['data']) {
   if (!apiData) return null;
 
-  console.log('transformAnalysisData - apiData keys:', Object.keys(apiData));
-  console.log('transformAnalysisData - annualIrradiation value:', apiData.annualIrradiation);
-  console.log('transformAnalysisData - apiResponseTimes:', apiData.apiResponseTimes);
-  console.log('transformAnalysisData - apiResponseTimes type:', typeof apiData.apiResponseTimes);
-  if (apiData.apiResponseTimes) {
-    console.log('transformAnalysisData - apiResponseTimes entries:', Object.entries(apiData.apiResponseTimes));
-  }
+  console.log('transformAnalysisData - simplified data:', apiData);
 
   return {
     id: apiData.id,
-    address: apiData.address,
-    coordinates: [apiData.coordinates.lng, apiData.coordinates.lat] as [number, number],
-    coverage: {
-      google: apiData.coverage.google,
-      fallback: apiData.coverage.fallback || (apiData.coverage.google ? undefined : "Usando estimativas regionais"),
-      dataQuality: apiData.coverage.dataQuality
-    },
-    confidence: apiData.confidence,
-    usableArea: apiData.usableArea,
-    areaSource: apiData.areaSource,
-    annualIrradiation: apiData.annualIrradiation,
-    irradiationSource: apiData.irradiationSource,
-    shadingIndex: apiData.shadingIndex,
-    shadingLoss: apiData.shadingLoss,
-    shadingSource: apiData.shadingSource,
-    estimatedProduction: apiData.estimatedProduction,
-    estimatedProductionAC: apiData.estimatedProductionAC,
-    estimatedProductionDC: apiData.estimatedProductionDC,
-    estimatedProductionYear1: apiData.estimatedProductionYear1,
-    estimatedProductionYear25: apiData.estimatedProductionYear25,
-    temperatureLosses: apiData.temperatureLosses,
-    degradationFactor: apiData.degradationFactor,
-    effectivePR: apiData.effectivePR,
+    coordinates: apiData.coordinates,
+    usableArea: apiData.usable_area,
+    areaSource: apiData.area_source,
+    annualIrradiation: apiData.annual_irradiation,
+    irradiationSource: apiData.irradiation_source,
+    shadingIndex: apiData.shading_index,
+    estimatedProduction: apiData.estimated_production,
     verdict: apiData.verdict,
     reasons: apiData.reasons,
     recommendations: apiData.recommendations,
     warnings: apiData.warnings,
-    footprints: apiData.footprints.map(fp => ({
-      id: fp.id,
-      coordinates: fp.coordinates,
-      area: fp.area,
-      isActive: fp.isActive,
-      source: fp.source
-    })),
-    usageFactor: apiData.usageFactor,
-    googleSolarData: apiData.googleSolarData,
-    technicalNote: apiData.technicalNote,
-    createdAt: apiData.createdAt,
-    updatedAt: apiData.updatedAt,
-    customPolygon: apiData.customPolygon,
-    // New API tracking fields
-    apiSourcesUsed: apiData.apiSourcesUsed,
-    apiResponseTimes: apiData.apiResponseTimes,
-    apiErrors: apiData.apiErrors,
-    fallbackReasons: apiData.fallbackReasons,
-    nasaPowerData: apiData.nasaPowerData,
-    pvgisData: apiData.pvgisData,
-    financialData: apiData.financialData,
+    coverage: apiData.coverage,
+    apiCacheIds: apiData.api_cache_ids,
+    // Default values for compatibility
+    address: '',
+    confidence: 'Média' as const,
+    shadingLoss: Math.round(apiData.shading_index * 100),
+    footprints: [],
+    usageFactor: 0.8
   };
 }

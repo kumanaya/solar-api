@@ -101,7 +101,7 @@ export const DetailMapView = forwardRef<MapLibreMapRef>((_, ref) => {
     });
 
     // Get center coordinates from footprint or fallback to address coordinates
-    let centerCoordinates = [analysis.coordinates[1], analysis.coordinates[0]]; // [lng, lat]
+    let centerCoordinates: [number, number] = [analysis.coordinates[1], analysis.coordinates[0]]; // [lng, lat]
     let initialZoom = 18;
 
     // If we have footprints, use them to calculate center and zoom
@@ -143,8 +143,6 @@ export const DetailMapView = forwardRef<MapLibreMapRef>((_, ref) => {
       style: getMapStyle(),
       center: centerCoordinates,
       zoom: initialZoom,
-      preserveDrawingBuffer: true, // Necessário para captura de imagem
-      antialias: true,
       attributionControl: false
     });
 
@@ -267,7 +265,7 @@ export const DetailMapView = forwardRef<MapLibreMapRef>((_, ref) => {
       }
     } else if (analysis.polygon.coordinates.length > 0) {
       // Fallback to polygon data if no footprints
-      const coordinates = analysis.polygon.coordinates.map(coord => [coord[1], coord[0]]);
+      const coordinates: [number, number][] = analysis.polygon.coordinates.map(coord => [coord[1], coord[0]]);
       
       map.current.addSource('polygon', {
         type: 'geojson',

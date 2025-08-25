@@ -42,7 +42,7 @@ export async function getFootprints(lat: number, lng: number): Promise<Footprint
     if (typeof responseBody === 'string') {
       try {
         responseBody = JSON.parse(responseBody);
-      } catch (parseError) {
+      } catch {
         // If can't parse, treat as network error
         return {
           success: false,

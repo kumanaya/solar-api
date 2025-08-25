@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { FileText, DollarSign, Loader2, Zap, Search, Save } from "lucide-react";
+import { Loader2, Zap, Search, Save } from "lucide-react";
 import { useAnalysis } from "./analysis-context";
 import { PDFModal } from "./pdf-modal";
 import { analyzeAddress, transformAnalysisData } from "@/lib/analysis-api";
@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/client";
 import { MapLibreMapRef } from "./maplibre-map";
 
 interface ActionButtonsProps {
-  mapRef: React.RefObject<MapLibreMapRef>;
+  mapRef: React.RefObject<MapLibreMapRef | null>;
 }
 
 export function ActionButtons({ mapRef }: ActionButtonsProps) {
@@ -42,21 +42,6 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
   const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   const [footprintNotFoundMessage, setFootprintNotFoundMessage] = useState<string | null>(null);
 
-  const handleOpenPDFModal = () => {
-    setIsPDFModalOpen(true);
-  };
-
-  const handleAddProposal = async () => {
-    try {
-      // Simular chamada para /pricing
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      console.log("Proposta adicionada para:", data.address);
-      alert("Proposta comercial adicionada ao laudo!");
-    } catch (error) {
-      console.error("Erro ao adicionar proposta:", error);
-      alert("Erro ao adicionar proposta. Tente novamente.");
-    }
-  };
 
   const handleSaveAnalysis = async () => {
     if (!data.estimatedProduction || data.estimatedProduction <= 0) {
@@ -70,24 +55,49 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
     try {
       console.log('Saving analysis to database...');
       console.log('Analysis data before saving:', JSON.stringify(data, null, 2));
-      console.log('annualIrradiation field value:', data.annualIrradiation);
-      console.log('apiSourcesUsed field value:', data.apiSourcesUsed);
-      console.log('nasaPowerData field value:', data.nasaPowerData);
-      console.log('pvgisData field value:', data.pvgisData);
       
       const supabase = createClient();
-      // Validate and prepare analysis data for saving using schema
+      
+      // Transform to new architecture format
       const analysisDataToSave = {
-        ...data,
-        address: selectedAddress || data.address, // Use selectedAddress which contains the actual address
+        address: selectedAddress || data.address,
         coordinates: Array.isArray(data.coordinates) 
           ? { lat: data.coordinates[1], lng: data.coordinates[0] }
-          : data.coordinates
+          : data.coordinates,
+        polygon: currentPolygon,
+        // Base analysis data from original analysis
+        base_usable_area: data.usableArea,
+        base_annual_irradiation: data.annualIrradiation,
+        base_shading_index: data.shadingIndex,
+        base_estimated_production: data.estimatedProduction,
+        confidence: data.confidence,
+        verdict: data.verdict,
+        reasons: data.reasons,
+        recommendations: data.recommendations,
+        warnings: data.warnings,
+        // Final calculated values (if technician inputs were used)
+        final_usable_area: data.technicianInputs?.panel_count ? data.usableArea : undefined,
+        final_estimated_production: data.technicianInputs?.panel_count ? data.estimatedProduction : undefined,
+        final_system_kwp: data.technicianInputs?.panel_count && data.technicianInputs?.panel_capacity_watts 
+          ? (data.technicianInputs.panel_count * data.technicianInputs.panel_capacity_watts) / 1000 
+          : undefined,
+        final_panel_count: data.technicianInputs?.panel_count || undefined,
+        final_panel_capacity_watts: data.technicianInputs?.panel_capacity_watts || undefined,
+        // Data objects
+        technicianInputs: data.technicianInputs,
+        financialData: data.financialData,
+        calculationParameters: data.technicianInputs ? {
+          dc_to_ac_conversion: data.technicianInputs.dc_to_ac_conversion,
+          annual_degradation_rate: data.technicianInputs.annual_degradation_rate,
+          system_lifetime_years: data.technicianInputs.system_lifetime_years,
+          discount_rate: data.technicianInputs.discount_rate,
+          annual_energy_cost_increase: data.technicianInputs.annual_energy_cost_increase
+        } : undefined
       };
 
-      console.log('Prepared analysis data for saving:', JSON.stringify(analysisDataToSave, null, 2));
+      console.log('Prepared analysis data for new architecture:', JSON.stringify(analysisDataToSave, null, 2));
 
-      const { data: saveResult, error } = await supabase.functions.invoke('save-analysis', {
+      const { data: saveResult, error } = await supabase.functions.invoke('save-analysis-v2', {
         body: {
           analysisData: analysisDataToSave
         }
@@ -143,7 +153,9 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
     console.log('Starting footprint search - cleared all errors and reset hasFootprintFromAction');
 
     try {
-      const [lng, lat] = data.coordinates;
+      // Handle both tuple and object coordinate formats
+      const lng = Array.isArray(data.coordinates) ? data.coordinates[0] : data.coordinates.lng;
+      const lat = Array.isArray(data.coordinates) ? data.coordinates[1] : data.coordinates.lat;
       console.log('Searching footprints for coordinates (from pin/address):', { lat, lng, address: data.address });
       
       const result = await getFootprints(lat, lng);
@@ -183,7 +195,7 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
               };
               const updatedData = {
                 ...storedData,
-                coordinates: [data.coordinates[0], data.coordinates[1]],
+                coordinates: [lng, lat] as [number, number],
                 address: data.address,
                 polygon: polygonData,
                 timestamp: Date.now()
@@ -264,12 +276,7 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
   
   
   const handleRunAnalysis = async () => {
-    if (!selectedAddress) {
-      setError('Nenhum endereço selecionado para análise');
-      return;
-    }
-    
-    // Check if we have coordinates and polygon (both required)
+    // Check if we have coordinates (required)
     if (!data.coordinates) {
       setError('Nenhuma coordenada disponível. Selecione um endereço primeiro.');
       return;
@@ -285,64 +292,31 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
     setError(null);
     
     try {
-      console.log(`Starting analysis for address: ${selectedAddress}`);
-      console.log('Current data coordinates:', data.coordinates);
+      console.log('Starting simplified analysis for coordinates:', data.coordinates);
       
-      // Determine polygon source and usable area override
+      // Determine polygon to send (optional)
       let polygonToSend = currentPolygon;
-      let usableAreaOverride: number | undefined;
-      
-      // Ensure user-drawn polygons have the correct source
-      if (currentPolygon && !currentPolygon.source) {
-        polygonToSend = {
-          ...currentPolygon,
-          source: "user-drawn"
-        };
-      }
       
       // If we have footprints from automatic detection, convert to polygon format
       if (data.footprints.length > 0 && !currentPolygon) {
         const activeFootprint = data.footprints.find(fp => fp.isActive);
         if (activeFootprint) {
-          // Determine source - check if it's from Microsoft footprints
-          let source: "user-drawn" | "microsoft-footprint" | "google-footprint" = "user-drawn";
-          if (activeFootprint.source) {
-            if (activeFootprint.source.toLowerCase().includes('microsoft')) {
-              source = "microsoft-footprint";
-            } else if (activeFootprint.source.toLowerCase().includes('google')) {
-              source = "google-footprint";
-            }
-          }
-          
           polygonToSend = {
             type: "Polygon" as const,
             coordinates: [activeFootprint.coordinates],
-            source: source
+            source: "microsoft-footprint"
           };
           console.log('Using footprint polygon for analysis:', polygonToSend);
         }
       }
       
-      // Calculate usable area override for manual areas
-      if (data.footprints.length > 0 && data.areaSource === 'footprint') {
-        const totalArea = data.footprints.reduce((sum, fp) => sum + fp.area, 0);
-        usableAreaOverride = Math.round(totalArea * data.usageFactor);
-      }
-      
-      // Ensure we have a polygon to send
-      if (!polygonToSend) {
-        setError('Nenhum polígono disponível para análise. Desenhe o telhado ou busque footprint automático.');
-        return;
-      }
-      
-      const [lng, lat] = data.coordinates;
+      // Handle both tuple and object coordinate formats  
+      const lng = Array.isArray(data.coordinates) ? data.coordinates[0] : data.coordinates.lng;
+      const lat = Array.isArray(data.coordinates) ? data.coordinates[1] : data.coordinates.lat;
       const result = await analyzeAddress(
-        selectedAddress,
         lat,
         lng,
-        polygonToSend,
-        usableAreaOverride,
-        data.technicianInputs
+        polygonToSend || undefined
       );
       
       if (!result.success) {
@@ -362,20 +336,16 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
       }
       
       console.log('Analysis completed successfully:', transformedData);
-      console.log('transformedData.annualIrradiation:', transformedData.annualIrradiation);
+      console.log('Analysis saved to database with ID:', transformedData.id);
       
-      // Show analysis ID if saved to database
-      if (transformedData.id) {
-        console.log('Analysis saved to database with ID:', transformedData.id);
-      }
-      
-      // Preserve current coordinates (where user placed the pin)
+      // Preserve current coordinates and other existing data
       const currentCoordinates = data.coordinates;
       updateData({
+        ...data, // Preserve existing data
         ...transformedData,
         coordinates: currentCoordinates, // Keep user's pin location
-        // Preserve existing footprints if analysis doesn't return them
-        footprints: result.data.footprints.length > 0 ? transformedData.footprints : data.footprints
+        address: selectedAddress || data.address, // Keep selected address
+        areaSource: (transformedData.areaSource as "google" | "footprint" | "manual" | "estimate") || "manual" // Ensure valid type
       });
       
       // Mark that we have analysis results to show the technical results
@@ -389,8 +359,8 @@ export function ActionButtons({ mapRef }: ActionButtonsProps) {
           const storedData = JSON.parse(currentStoredData);
           const updatedData = {
             ...storedData,
-            coordinates: [currentCoordinates[0], currentCoordinates[1]],
-            address: transformedData.address,
+            coordinates: [lng, lat] as [number, number],
+            address: selectedAddress,
             polygon: polygonToSend,
             timestamp: Date.now()
           };
