@@ -1029,10 +1029,10 @@ export function RecommendationsCard({
           {recommendations.map((recommendation, index) => (
             <div
               key={index}
-              className="flex items-start space-x-2 p-2 bg-blue-50 rounded-md"
+              className="flex items-start space-x-2 p-2 border rounded-md"
             >
-              <CheckCircle className="h-3 w-3 text-blue-600 mt-1 flex-shrink-0" />
-              <p className="text-sm text-blue-800">{recommendation}</p>
+              <CheckCircle className="h-3 w-3 text-foreground mt-1 flex-shrink-0" />
+              <p className="text-sm text-foreground">{recommendation}</p>
             </div>
           ))}
         </div>

@@ -13,7 +13,7 @@ import {
   ImageryInfoCard,
   FinancialAnalysisCard,
   RecommendationsCard,
-  WarningsCard
+  WarningsCard,
 } from "@/components/shared/analysis-cards";
 import { TechnicianInputsPanel } from "@/components/shared/technician-inputs-panel";
 import { TechnicianInputs } from "@/lib/solar-calculations";
@@ -40,28 +40,27 @@ export function TechnicalResults() {
       roi_percentage: number;
     };
   } | null>(null);
-  
+
   // Só renderizar se tivermos resultados de análise
   if (!hasAnalysisResults) return null;
 
   const handleUsageFactorChange = (value: number) => {
     setLocalUsageFactor(value);
     const newUsableArea = Math.floor(data.footprints[0]?.area * value || 0);
-    updateData({ 
+    updateData({
       usageFactor: value,
-      usableArea: newUsableArea
+      usableArea: newUsableArea,
     });
-    
+
     // Trigger recalculation if we have technician inputs
     if (data.technicianInputs && dynamicResults) {
       // The effect in TechnicianInputsPanel will handle recalculation
     }
   };
 
-
   const handleTechnicianInputsChange = (inputs: TechnicianInputs) => {
     updateData({
-      technicianInputs: inputs
+      technicianInputs: inputs,
     });
   };
 
@@ -92,7 +91,7 @@ export function TechnicalResults() {
       reasons: results.reasons,
       recommendations: results.recommendations,
       warnings: results.warnings,
-      financialData: results.financial_data
+      financialData: results.financial_data,
     });
   };
 
@@ -109,20 +108,27 @@ export function TechnicalResults() {
   }
 
   // Use dynamic results if available, otherwise use original data
-  const displayData = dynamicResults ? {
-    ...data,
-    estimatedProduction: dynamicResults.annual_production_kwh,
-    estimatedProductionAC: dynamicResults.annual_production_ac,
-    estimatedProductionDC: dynamicResults.annual_production_dc,
-    verdict: dynamicResults.verdict,
-    reasons: dynamicResults.reasons,
-    recommendations: dynamicResults.recommendations,
-    warnings: dynamicResults.warnings,
-    financialData: dynamicResults.financial_data
-  } : data;
+  const displayData = dynamicResults
+    ? {
+        ...data,
+        estimatedProduction: dynamicResults.annual_production_kwh,
+        estimatedProductionAC: dynamicResults.annual_production_ac,
+        estimatedProductionDC: dynamicResults.annual_production_dc,
+        verdict: dynamicResults.verdict,
+        reasons: dynamicResults.reasons,
+        recommendations: dynamicResults.recommendations,
+        warnings: dynamicResults.warnings,
+        financialData: dynamicResults.financial_data,
+      }
+    : data;
 
   return (
     <div className="space-y-4 max-w-3xl mx-auto">
+      {displayData.recommendations &&
+        displayData.recommendations.length > 0 && (
+          <RecommendationsCard recommendations={displayData.recommendations} />
+        )}
+
       {/* Technician Inputs Panel - First after analysis */}
       {hasAnalysisResults && (
         <TechnicianInputsPanel
@@ -131,9 +137,12 @@ export function TechnicalResults() {
             annual_irradiation: data.annualIrradiation,
             usable_area: data.usableArea,
             shading_index: data.shadingIndex,
-            coordinates: Array.isArray(data.coordinates) ? 
-              data.coordinates : 
-              [data.coordinates?.lng ?? 0, data.coordinates?.lat ?? 0] as [number, number]
+            coordinates: Array.isArray(data.coordinates)
+              ? data.coordinates
+              : ([data.coordinates?.lng ?? 0, data.coordinates?.lat ?? 0] as [
+                  number,
+                  number
+                ]),
           }}
           onInputsChange={handleTechnicianInputsChange}
           onRecalculate={handleRecalculation}
@@ -152,7 +161,7 @@ export function TechnicalResults() {
       <IrradiationCard
         annualIrradiation={displayData.annualIrradiation}
         irradiationSource={displayData.irradiationSource}
-        sources={[displayData.irradiationSource || 'PVGIS']}
+        sources={[displayData.irradiationSource || "PVGIS"]}
       />
 
       <ShadingCard
@@ -165,16 +174,27 @@ export function TechnicalResults() {
         estimatedProduction={displayData.estimatedProduction}
         usableArea={displayData.usableArea}
         estimatedProductionYear1={displayData.estimatedProductionAC}
-        estimatedProductionYear25={displayData.estimatedProductionAC ? Math.round(displayData.estimatedProductionAC * 0.85) : undefined}
+        estimatedProductionYear25={
+          displayData.estimatedProductionAC
+            ? Math.round(displayData.estimatedProductionAC * 0.85)
+            : undefined
+        }
         showDetails={true}
       />
 
       <SystemConfigCard
         usableArea={displayData.usableArea}
-        technicianInputs={displayData.technicianInputs ? {
-          panel_count: displayData.technicianInputs.panel_count ?? undefined,
-          panel_capacity_watts: displayData.technicianInputs.panel_capacity_watts ?? undefined,
-        } : undefined}
+        technicianInputs={
+          displayData.technicianInputs
+            ? {
+                panel_count:
+                  displayData.technicianInputs.panel_count ?? undefined,
+                panel_capacity_watts:
+                  displayData.technicianInputs.panel_capacity_watts ??
+                  undefined,
+              }
+            : undefined
+        }
       />
 
       <SystemLifetimeCard
@@ -192,21 +212,11 @@ export function TechnicalResults() {
         reasons={displayData.reasons}
       />
 
-      {displayData.recommendations && displayData.recommendations.length > 0 && (
-        <RecommendationsCard
-          recommendations={displayData.recommendations}
-        />
-      )}
-
       {displayData.warnings && displayData.warnings.length > 0 && (
-        <WarningsCard
-          warnings={displayData.warnings}
-        />
+        <WarningsCard warnings={displayData.warnings} />
       )}
 
-      <ImageryInfoCard
-        googleSolarData={displayData.googleSolarData}
-      />
+      <ImageryInfoCard googleSolarData={displayData.googleSolarData} />
     </div>
   );
 }
